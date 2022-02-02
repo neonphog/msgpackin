@@ -26,8 +26,8 @@ publish: tools
 	cargo publish --manifest-path crates/msgpackin_core/Cargo.toml
 	#echo "-- wait for crates.io... --"; sleep 30
 	#cargo publish --manifest-path crates/msgpackin/Cargo.toml
-	VER="v$$(grep version crates/msgpackin_core/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; echo git tag -a $$VER -m $$VER
-	echo git push --tags
+	VER="v$$(grep version crates/msgpackin_core/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; git tag -a $$VER -m $$VER
+	git push --tags
 
 test: tools
 	$(ENV) cargo fmt -- --check
