@@ -2,9 +2,7 @@ use crate::decode::*;
 
 const MAX_TOKS: usize = 32;
 
-fn exec_decode_tests<'a>(
-    fixture: &'a [u8],
-) -> [Option<Token<'a>>; MAX_TOKS] {
+fn exec_decode_tests<'a>(fixture: &'a [u8]) -> [Option<Token<'a>>; MAX_TOKS] {
     let mut out1 = [None; MAX_TOKS];
     let mut out1_cursor = 0;
 
@@ -550,7 +548,10 @@ const FIXTURE_MAP: &[(&[&str], &[u8])] = &[
     (&[], &[0xdf, 0x00, 0x00, 0x00, 0x00]),
     (&["a", "b"], &[0x81, 0xa1, 0x61, 0xa1, 0x62]),
     (&["a", "b"], &[0xde, 0x00, 0x01, 0xa1, 0x61, 0xa1, 0x62]),
-    (&["a", "b"], &[0xdf, 0x00, 0x00, 0x00, 0x01, 0xa1, 0x61, 0xa1, 0x62]),
+    (
+        &["a", "b"],
+        &[0xdf, 0x00, 0x00, 0x00, 0x01, 0xa1, 0x61, 0xa1, 0x62],
+    ),
 ];
 
 #[test]

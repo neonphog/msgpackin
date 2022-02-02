@@ -250,7 +250,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             None
         } else {
             self.cursor += 1;
-            Some(self.data[self.cursor - 1 as usize])
+            Some(self.data[self.cursor - 1])
         }
     }
 
@@ -283,15 +283,13 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             // positive fixint
             m @ 0x00..=0x7f => Some(Token::U8(m)),
             // fixmap
-            m @ 0x80..=0x8f => Some(Token::Len(
-                LenType::Map,
-                (m & FIXMAP_SIZE) as u32,
-            )),
+            m @ 0x80..=0x8f => {
+                Some(Token::Len(LenType::Map, (m & FIXMAP_SIZE) as u32))
+            }
             // fixarray
-            m @ 0x90..=0x9f => Some(Token::Len(
-                LenType::Arr,
-                (m & FIXARR_SIZE) as u32,
-            )),
+            m @ 0x90..=0x9f => {
+                Some(Token::Len(LenType::Arr, (m & FIXARR_SIZE) as u32))
+            }
             // fixstr
             m @ 0xa0..=0xbf => {
                 let len = (m & FIXSTR_SIZE) as u32;
@@ -308,8 +306,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             0xc3 => Some(Token::Bool(true)),
             // bin 8
             0xc4 => {
-                self.dec.state =
-                    DecState::Pend8(PendType::Len(LenType::Bin));
+                self.dec.state = DecState::Pend8(PendType::Len(LenType::Bin));
                 self.next()
             }
             // bin 16
@@ -423,8 +420,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             }
             // str 8
             0xd9 => {
-                self.dec.state =
-                    DecState::Pend8(PendType::Len(LenType::Str));
+                self.dec.state = DecState::Pend8(PendType::Len(LenType::Str));
                 self.next()
             }
             // str 16
@@ -499,11 +495,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
 
     /// We got a length, set up our state
     /// appropriate to the specific length type
-    fn parse_got_len(
-        &mut self,
-        t: LenType,
-        len: u32,
-    ) -> Option<Token<'buf>> {
+    fn parse_got_len(&mut self, t: LenType, len: u32) -> Option<Token<'buf>> {
         use LenType::*;
         match t {
             Bin | Str | Ext(_) => {
@@ -521,11 +513,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
     }
 
     /// in this ext case we have already read the type byte
-    fn parse_ext(
-        &mut self,
-        t: i8,
-        len: u32,
-    ) -> Option<Token<'buf>> {
+    fn parse_ext(&mut self, t: i8, len: u32) -> Option<Token<'buf>> {
         self.dec.set_want_bin_data(len);
         Some(Token::Len(LenType::Ext(t), len))
     }
