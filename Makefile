@@ -19,14 +19,11 @@ bump:
 		echo "# updating version in $${toml} to $(ver)"; \
 		sed -i'' 's/^version = \"[^"]*"$$/version = "$(ver)"/g' $${toml}; \
 		sed -i'' 's/^msgpackin_core = { version = \"[^"]*"/msgpackin_core = { version = "=$(ver)"/g' $${toml}; \
-		sed -i'' 's/^msgpackin_alloc = { version = \"[^"]*"/msgpackin_alloc = { version = "=$(ver)"/g' $${toml}; \
 	done
 
 publish: tools
 	git diff --exit-code
 	cargo publish --manifest-path crates/msgpackin_core/Cargo.toml
-	#echo "-- wait for crates.io... --"; sleep 30
-	#cargo publish --manifest-path crates/msgpackin_alloc/Cargo.toml
 	#echo "-- wait for crates.io... --"; sleep 30
 	#cargo publish --manifest-path crates/msgpackin/Cargo.toml
 	VER="v$$(grep version crates/msgpackin_core/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; echo git tag -a $$VER -m $$VER
@@ -38,7 +35,6 @@ test: tools
 	$(ENV) RUST_BACKTRACE=1 cargo test --all-targets --no-run
 	$(ENV) RUST_BACKTRACE=1 cargo test
 	$(ENV) cargo readme -r crates/msgpackin_core -o README.md
-	#$(ENV) cargo readme -r crates/msgpackin_alloc -o README.md
 	#$(ENV) cargo readme -r crates/msgpackin -o README.md
 	#$(ENV) cargo readme -r crates/msgpackin -o ../../README.md
 	@if [ "${CI}x" != "x" ]; then git diff --exit-code; fi
