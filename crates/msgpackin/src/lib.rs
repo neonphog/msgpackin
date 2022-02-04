@@ -6,6 +6,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]
+#[macro_use]
 extern crate alloc;
 
 #[cfg(all(feature = "std", feature = "serde", not(feature = "serde_std")))]
@@ -21,6 +22,9 @@ mod lib {
     }
 
     pub use self::core::fmt;
+    pub use self::core::future::Future;
+    pub use self::core::iter;
+    pub use self::core::pin;
     pub use self::core::result;
 
     #[cfg(not(feature = "std"))]
@@ -32,6 +36,11 @@ mod lib {
     pub use alloc::boxed::Box;
     #[cfg(feature = "std")]
     pub use std::boxed::Box;
+
+    #[cfg(not(feature = "std"))]
+    pub use alloc::borrow::Cow;
+    #[cfg(feature = "std")]
+    pub use std::borrow::Cow;
 
     #[cfg(not(feature = "std"))]
     pub use alloc::string::{String, ToString};
@@ -53,28 +62,35 @@ mod std_err {
     }
 }
 
-pub use msgpackin_core::num::Num;
+/// Msgpackin Types
+pub mod types {
+    use super::*;
 
-#[cfg(all(not(feature = "std"), feature = "serde"))]
-pub use ::serde::de::StdError;
-#[cfg(feature = "std")]
-pub use ::std::error::Error as StdError;
-#[cfg(all(not(feature = "std"), not(feature = "serde")))]
-pub use std_err::Error as StdError;
+    #[cfg(all(not(feature = "std"), feature = "serde"))]
+    pub use ::serde::de::StdError;
+    #[cfg(feature = "std")]
+    pub use ::std::error::Error as StdError;
+    #[cfg(all(not(feature = "std"), not(feature = "serde")))]
+    pub use std_err::Error as StdError;
 
-mod config;
-pub use config::*;
+    pub use msgpackin_core::num::Num;
 
-mod error;
-pub use error::*;
+    mod config;
+    pub use config::*;
+
+    mod error;
+    pub use error::*;
+
+    /// Type alias for a pinned future
+    pub type BoxFut<'a, T> = pin::Pin<Box<dyn Future<Output = Result<T>> + 'a>>;
+
+    pub mod consumer;
+    pub mod producer;
+}
+
+use types::*;
 
 pub mod value;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+pub use value::Value;
+pub use value::ValueRef;

@@ -17,7 +17,7 @@ pub trait NumTo<T> {
 
 /// A number type that encapsulates what integers and floats can
 /// be represented in MessagePack Rust
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum Num {
     /// Num is backed by f32 storage.
     F32(f32),
@@ -30,6 +30,28 @@ pub enum Num {
 
     /// Num is backed by u64 storage.
     Unsigned(u64),
+}
+
+impl core::fmt::Debug for Num {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Num::F32(n) => n.fmt(f),
+            Num::F64(n) => n.fmt(f),
+            Num::Signed(n) => n.fmt(f),
+            Num::Unsigned(n) => n.fmt(f),
+        }
+    }
+}
+
+impl core::fmt::Display for Num {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Num::F32(n) => n.fmt(f),
+            Num::F64(n) => n.fmt(f),
+            Num::Signed(n) => n.fmt(f),
+            Num::Unsigned(n) => n.fmt(f),
+        }
+    }
 }
 
 impl PartialEq for Num {

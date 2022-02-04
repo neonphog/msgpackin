@@ -23,7 +23,7 @@ pub enum LenType {
 }
 
 /// MessagePack Rust decoded message pack tokens
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Token<'lt> {
     /// Indicates incomplete binary data for Bin, Str, or Ext tokens.
     /// The second tuple field (the u32 value) is the remaining length
@@ -44,6 +44,21 @@ pub enum Token<'lt> {
 
     /// A number value
     Num(Num),
+}
+
+impl core::fmt::Debug for Token<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Token::BinCont(b, r) => {
+                write!(f, "BinCont({} bytes, {} remain)", b.len(), r)
+            }
+            Token::Bin(b) => write!(f, "Bin({} bytes)", b.len()),
+            Token::Len(t, l) => write!(f, "Len({:?}, {} bytes)", t, l),
+            Token::Nil => f.write_str("Nil"),
+            Token::Bool(b) => write!(f, "Bool({})", b),
+            Token::Num(n) => write!(f, "Num({:?})", n),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
