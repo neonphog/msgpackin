@@ -1,5 +1,8 @@
 //! decode library code
 
+use crate::const_::*;
+use crate::num::*;
+
 /// MessagePack Rust length markers come in these varieties
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LenType {
@@ -39,35 +42,8 @@ pub enum Token<'lt> {
     /// A boolean value
     Bool(bool),
 
-    /// unsigned 8-bit integer
-    U8(u8),
-
-    /// unsigned 16-bit integer
-    U16(u16),
-
-    /// unsigned 32-bit integer
-    U32(u32),
-
-    /// unsigned 64-bit integer
-    U64(u64),
-
-    /// signed 8-bit integer
-    I8(i8),
-
-    /// signed 16-bit integer
-    I16(i16),
-
-    /// signed 32-bit integer
-    I32(i32),
-
-    /// signed 64-bit integer
-    I64(i64),
-
-    /// 32-bit floating point value
-    F32(f32),
-
-    /// 64-bit floating point value
-    F64(f64),
+    /// A number value
+    Num(Num),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -281,7 +257,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
 
         match self.get_byte()? {
             // positive fixint
-            m @ 0x00..=0x7f => Some(Token::U8(m)),
+            m @ 0x00..=0x7f => Some(Token::Num(m.into())),
             // fixmap
             m @ 0x80..=0x8f => {
                 Some(Token::Len(LenType::Map, (m & FIXMAP_SIZE) as u32))
@@ -296,175 +272,151 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
                 self.dec.set_want_bin_data(len);
                 Some(Token::Len(LenType::Str, len))
             }
-            // nil
-            0xc0 => Some(Token::Nil),
+            C_NIL => Some(Token::Nil),
             // reserved (this should never be used... treat it like nil)
-            0xc1 => Some(Token::Nil),
-            // bool false
-            0xc2 => Some(Token::Bool(false)),
-            // bool true
-            0xc3 => Some(Token::Bool(true)),
-            // bin 8
-            0xc4 => {
+            C_RES => Some(Token::Nil),
+            C_FALSE => Some(Token::Bool(false)),
+            C_TRUE => Some(Token::Bool(true)),
+            C_BIN8 => {
                 self.dec.state = DecState::Pend8(PendType::Len(LenType::Bin));
                 self.next()
             }
-            // bin 16
-            0xc5 => {
+            C_BIN16 => {
                 self.dec.state = DecState::Pend16(
                     PendType::Len(LenType::Bin),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // bin 32
-            0xc6 => {
+            C_BIN32 => {
                 self.dec.state = DecState::Pend32(
                     PendType::Len(LenType::Bin),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // ext 8
-            0xc7 => {
+            C_EXT8 => {
                 self.dec.state = DecState::Pend8(PendType::ExtLen);
                 self.next()
             }
-            0xc8 => {
+            C_EXT16 => {
                 self.dec.state =
                     DecState::Pend16(PendType::ExtLen, PartialStore::new());
                 self.next()
             }
-            0xc9 => {
+            C_EXT32 => {
                 self.dec.state =
                     DecState::Pend32(PendType::ExtLen, PartialStore::new());
                 self.next()
             }
-            // f32
-            0xca => {
+            C_F32 => {
                 self.dec.state =
                     DecState::Pend32(PendType::F32, PartialStore::new());
                 self.next()
             }
-            // f64
-            0xcb => {
+            C_F64 => {
                 self.dec.state =
                     DecState::Pend64(PendType::F64, PartialStore::new());
                 self.next()
             }
-            // u8
-            0xcc => {
+            C_U8 => {
                 self.dec.state = DecState::Pend8(PendType::U8);
                 self.next()
             }
-            // u16
-            0xcd => {
+            C_U16 => {
                 self.dec.state =
                     DecState::Pend16(PendType::U16, PartialStore::new());
                 self.next()
             }
-            // u32
-            0xce => {
+            C_U32 => {
                 self.dec.state =
                     DecState::Pend32(PendType::U32, PartialStore::new());
                 self.next()
             }
-            // u64
-            0xcf => {
+            C_U64 => {
                 self.dec.state =
                     DecState::Pend64(PendType::U64, PartialStore::new());
                 self.next()
             }
-            // i8
-            0xd0 => {
+            C_I8 => {
                 self.dec.state = DecState::Pend8(PendType::I8);
                 self.next()
             }
-            // i16
-            0xd1 => {
+            C_I16 => {
                 self.dec.state =
                     DecState::Pend16(PendType::I16, PartialStore::new());
                 self.next()
             }
-            // i32
-            0xd2 => {
+            C_I32 => {
                 self.dec.state =
                     DecState::Pend32(PendType::I32, PartialStore::new());
                 self.next()
             }
-            // i64
-            0xd3 => {
+            C_I64 => {
                 self.dec.state =
                     DecState::Pend64(PendType::I64, PartialStore::new());
                 self.next()
             }
-            0xd4 => {
+            C_FIXEXT1 => {
                 self.dec.state = DecState::Pend8(PendType::Ext(1));
                 self.next()
             }
-            0xd5 => {
+            C_FIXEXT2 => {
                 self.dec.state = DecState::Pend8(PendType::Ext(2));
                 self.next()
             }
-            0xd6 => {
+            C_FIXEXT4 => {
                 self.dec.state = DecState::Pend8(PendType::Ext(4));
                 self.next()
             }
-            0xd7 => {
+            C_FIXEXT8 => {
                 self.dec.state = DecState::Pend8(PendType::Ext(8));
                 self.next()
             }
-            0xd8 => {
+            C_FIXEXT16 => {
                 self.dec.state = DecState::Pend8(PendType::Ext(16));
                 self.next()
             }
-            // str 8
-            0xd9 => {
+            C_STR8 => {
                 self.dec.state = DecState::Pend8(PendType::Len(LenType::Str));
                 self.next()
             }
-            // str 16
-            0xda => {
+            C_STR16 => {
                 self.dec.state = DecState::Pend16(
                     PendType::Len(LenType::Str),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // str 32
-            0xdb => {
+            C_STR32 => {
                 self.dec.state = DecState::Pend32(
                     PendType::Len(LenType::Str),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // array 16
-            0xdc => {
+            C_ARR16 => {
                 self.dec.state = DecState::Pend16(
                     PendType::Len(LenType::Arr),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // array 32
-            0xdd => {
+            C_ARR32 => {
                 self.dec.state = DecState::Pend32(
                     PendType::Len(LenType::Arr),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // map 16
-            0xde => {
+            C_MAP16 => {
                 self.dec.state = DecState::Pend16(
                     PendType::Len(LenType::Map),
                     PartialStore::new(),
                 );
                 self.next()
             }
-            // map 32
-            0xdf => {
+            C_MAP32 => {
                 self.dec.state = DecState::Pend32(
                     PendType::Len(LenType::Map),
                     PartialStore::new(),
@@ -472,7 +424,7 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
                 self.next()
             }
             // negative fixint
-            m @ 0xe0..=0xff => Some(Token::I8(m as i8)),
+            m @ 0xe0..=0xff => Some(Token::Num((m as i8).into())),
         }
     }
 
@@ -532,8 +484,8 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             PendType::Len(t) => self.parse_got_len(t, b as u32),
             PendType::ExtLen => self.parse_ext_len(b as u32),
             PendType::Ext(len) => self.parse_ext(b as i8, len),
-            PendType::U8 => Some(Token::U8(b)),
-            PendType::I8 => Some(Token::I8(b as i8)),
+            PendType::U8 => Some(Token::Num(b.into())),
+            PendType::I8 => Some(Token::Num((b as i8).into())),
             _ => unreachable!(),
         }
     }
@@ -557,8 +509,8 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             match t {
                 PendType::Len(t) => self.parse_got_len(t, p.as_u16() as u32),
                 PendType::ExtLen => self.parse_ext_len(p.as_u16() as u32),
-                PendType::U16 => Some(Token::U16(p.as_u16())),
-                PendType::I16 => Some(Token::I16(p.as_i16())),
+                PendType::U16 => Some(Token::Num(p.as_u16().into())),
+                PendType::I16 => Some(Token::Num(p.as_i16().into())),
                 _ => unreachable!(),
             }
         } else {
@@ -586,9 +538,9 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
             match t {
                 PendType::Len(t) => self.parse_got_len(t, p.as_u32()),
                 PendType::ExtLen => self.parse_ext_len(p.as_u32()),
-                PendType::U32 => Some(Token::U32(p.as_u32())),
-                PendType::I32 => Some(Token::I32(p.as_i32())),
-                PendType::F32 => Some(Token::F32(p.as_f32())),
+                PendType::U32 => Some(Token::Num(p.as_u32().into())),
+                PendType::I32 => Some(Token::Num(p.as_i32().into())),
+                PendType::F32 => Some(Token::Num(p.as_f32().into())),
                 _ => unreachable!(),
             }
         } else {
@@ -614,9 +566,9 @@ impl<'dec, 'buf> TokenIter<'dec, 'buf> {
         p.push(bytes);
         if p.len() == 8 {
             match t {
-                PendType::U64 => Some(Token::U64(p.as_u64())),
-                PendType::I64 => Some(Token::I64(p.as_i64())),
-                PendType::F64 => Some(Token::F64(p.as_f64())),
+                PendType::U64 => Some(Token::Num(p.as_u64().into())),
+                PendType::I64 => Some(Token::Num(p.as_i64().into())),
+                PendType::F64 => Some(Token::Num(p.as_f64().into())),
                 _ => unreachable!(),
             }
         } else {

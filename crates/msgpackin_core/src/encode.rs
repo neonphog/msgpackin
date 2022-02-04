@@ -1,5 +1,9 @@
 //! encode library code
 
+use crate::const_::*;
+use crate::num::*;
+use core::ops::Deref;
+
 /// MessagePack Rust variable-size byte array result
 #[derive(Debug, Clone, Copy)]
 pub struct VarBytes(VbPriv);
@@ -9,6 +13,18 @@ impl core::ops::Deref for VarBytes {
 
     fn deref(&self) -> &Self::Target {
         &*self.0
+    }
+}
+
+impl core::convert::AsRef<[u8]> for VarBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
+impl core::borrow::Borrow<[u8]> for VarBytes {
+    fn borrow(&self) -> &[u8] {
+        self.deref()
     }
 }
 
@@ -89,115 +105,70 @@ impl Encoder {
     }
 
     /// Encode msgpack bytes for `nil`
-    pub fn enc_nil(&mut self) -> [u8; 1] {
-        [0xc0]
+    pub fn enc_nil(&mut self) -> VarBytes {
+        [C_NIL].into()
     }
 
     /// Encode msgpack bytes for `bool`
-    pub fn enc_bool(&mut self, b: bool) -> [u8; 1] {
+    pub fn enc_bool(&mut self, b: bool) -> VarBytes {
         if b {
-            [0xc3]
+            [C_TRUE].into()
         } else {
-            [0xc2]
+            [C_FALSE].into()
         }
     }
 
-    /// Encode msgpack bytes for `u8`
-    pub fn enc_u8(&mut self, u: u8) -> [u8; 2] {
-        [0xcc, u]
-    }
+    /// Encode msgpack bytes for msgpack `Num` type
+    pub fn enc_num<N: Into<Num>>(&mut self, n: N) -> VarBytes {
+        let i = match n.into() {
+            Num::F32(f) => {
+                let mut out = [C_F32, 0, 0, 0, 0];
+                out[1..5].copy_from_slice(&f.to_be_bytes());
+                return out.into();
+            }
+            Num::F64(f) => {
+                let mut out = [C_F64, 0, 0, 0, 0, 0, 0, 0, 0];
+                out[1..9].copy_from_slice(&f.to_be_bytes());
+                return out.into();
+            }
+            Num::Signed(i) => i as i128,
+            Num::Unsigned(u) => u as i128,
+        };
 
-    /// Encode msgpack bytes for `u16`
-    pub fn enc_u16(&mut self, u: u16) -> [u8; 3] {
-        let mut out = [0xcd, 0, 0];
-        out[1..3].copy_from_slice(&u.to_be_bytes());
-        out
-    }
-
-    /// Encode msgpack bytes for `u32`
-    pub fn enc_u32(&mut self, u: u32) -> [u8; 5] {
-        let mut out = [0xce, 0, 0, 0, 0];
-        out[1..5].copy_from_slice(&u.to_be_bytes());
-        out
-    }
-
-    /// Encode msgpack bytes for `u64`
-    pub fn enc_u64(&mut self, u: u64) -> [u8; 9] {
-        let mut out = [0xcf, 0, 0, 0, 0, 0, 0, 0, 0];
-        out[1..9].copy_from_slice(&u.to_be_bytes());
-        out
-    }
-
-    /// Encode smallest msgpack bytes for an unsigned integer
-    pub fn enc_small_uint(&mut self, u: u64) -> VarBytes {
-        if u < 128 {
-            [u as u8].into()
-        } else if u < 256 {
-            self.enc_u8(u as u8).into()
-        } else if u < 65536 {
-            self.enc_u16(u as u16).into()
-        } else if u < 4294967296 {
-            self.enc_u32(u as u32).into()
-        } else {
-            self.enc_u64(u).into()
-        }
-    }
-
-    /// Encode msgpack bytes for `i8`
-    pub fn enc_i8(&mut self, i: i8) -> [u8; 2] {
-        [0xd0, i as u8]
-    }
-
-    /// Encode msgpack bytes for `i16`
-    pub fn enc_i16(&mut self, i: i16) -> [u8; 3] {
-        let mut out = [0xd1, 0, 0];
-        out[1..3].copy_from_slice(&i.to_be_bytes());
-        out
-    }
-
-    /// Encode msgpack bytes for `i32`
-    pub fn enc_i32(&mut self, i: i32) -> [u8; 5] {
-        let mut out = [0xd2, 0, 0, 0, 0];
-        out[1..5].copy_from_slice(&i.to_be_bytes());
-        out
-    }
-
-    /// Encode msgpack bytes for `i64`
-    pub fn enc_i64(&mut self, i: i64) -> [u8; 9] {
-        let mut out = [0xd3, 0, 0, 0, 0, 0, 0, 0, 0];
-        out[1..9].copy_from_slice(&i.to_be_bytes());
-        out
-    }
-
-    /// Encode smallest msgpack bytes for a signed integer
-    pub fn enc_small_int(&mut self, i: i64) -> VarBytes {
-        if i >= 0 {
-            self.enc_small_uint(i as u64)
-        } else if i > -32 {
+        #[allow(clippy::manual_range_contains)]
+        if i >= 0 && i < 128 {
+            [i as u8].into()
+        } else if i > -32 && i < 0 {
             [i as i8 as u8].into()
-        } else if i > -128 {
-            self.enc_i8(i as i8).into()
-        } else if i > -32768 {
-            self.enc_i16(i as i16).into()
-        } else if i > -2147483648 {
-            self.enc_i32(i as i32).into()
+        } else if i >= i8::MIN as i128 && i <= i8::MAX as i128 {
+            [C_I8, i as u8].into()
+        } else if i >= i16::MIN as i128 && i <= i16::MAX as i128 {
+            let mut out = [C_I16, 0, 0];
+            out[1..3].copy_from_slice(&(i as i16).to_be_bytes());
+            out.into()
+        } else if i >= i32::MIN as i128 && i <= i32::MAX as i128 {
+            let mut out = [C_I32, 0, 0, 0, 0];
+            out[1..5].copy_from_slice(&(i as i32).to_be_bytes());
+            out.into()
+        } else if i <= i64::MAX as i128 {
+            let mut out = [C_I64, 0, 0, 0, 0, 0, 0, 0, 0];
+            out[1..9].copy_from_slice(&(i as i64).to_be_bytes());
+            out.into()
+        } else if i <= u8::MAX as i128 {
+            [C_U8, i as u8].into()
+        } else if i <= u16::MAX as i128 {
+            let mut out = [C_U16, 0, 0];
+            out[1..3].copy_from_slice(&(i as u16).to_be_bytes());
+            out.into()
+        } else if i <= u32::MAX as i128 {
+            let mut out = [C_U32, 0, 0, 0, 0];
+            out[1..5].copy_from_slice(&(i as u32).to_be_bytes());
+            out.into()
         } else {
-            self.enc_i64(i).into()
+            let mut out = [C_U64, 0, 0, 0, 0, 0, 0, 0, 0];
+            out[1..9].copy_from_slice(&(i as u64).to_be_bytes());
+            out.into()
         }
-    }
-
-    /// Encode msgpack bytes for `f32`
-    pub fn enc_f32(&mut self, f: f32) -> [u8; 5] {
-        let mut out = [0xca, 0, 0, 0, 0];
-        out[1..5].copy_from_slice(&f.to_be_bytes());
-        out
-    }
-
-    /// Encode msgpack bytes for `f64`
-    pub fn enc_f64(&mut self, f: f64) -> [u8; 9] {
-        let mut out = [0xcb, 0, 0, 0, 0, 0, 0, 0, 0];
-        out[1..9].copy_from_slice(&f.to_be_bytes());
-        out
     }
 
     /// Encode msgpack bytes for arbitrary binary byte length.
@@ -205,13 +176,13 @@ impl Encoder {
     /// just copy them directly into your buffer
     pub fn enc_bin_len(&mut self, len: u32) -> VarBytes {
         if len < 256 {
-            [0xc4, len as u8].into()
+            [C_BIN8, len as u8].into()
         } else if len < 65536 {
-            let mut out = [0xc5, 0, 0];
+            let mut out = [C_BIN16, 0, 0];
             out[1..3].copy_from_slice(&(len as u16).to_be_bytes());
             out.into()
         } else {
-            let mut out = [0xc6, 0, 0, 0, 0];
+            let mut out = [C_BIN32, 0, 0, 0, 0];
             out[1..5].copy_from_slice(&len.to_be_bytes());
             out.into()
         }
@@ -222,15 +193,15 @@ impl Encoder {
     /// just copy them directly into your buffer (`as_bytes()`)
     pub fn enc_str_len(&mut self, len: u32) -> VarBytes {
         if len < 32 {
-            [0xa0 | (len as u8 & 0x1f)].into()
+            [C_FIXSTR0 | (len as u8 & 0x1f)].into()
         } else if len < 256 {
-            [0xd9, len as u8].into()
+            [C_STR8, len as u8].into()
         } else if len < 65536 {
-            let mut out = [0xda, 0, 0];
+            let mut out = [C_STR16, 0, 0];
             out[1..3].copy_from_slice(&(len as u16).to_be_bytes());
             out.into()
         } else {
-            let mut out = [0xdb, 0, 0, 0, 0];
+            let mut out = [C_STR32, 0, 0, 0, 0];
             out[1..5].copy_from_slice(&len.to_be_bytes());
             out.into()
         }
@@ -239,13 +210,13 @@ impl Encoder {
     /// Encode msgpack bytes for array marker / length
     pub fn enc_arr_len(&mut self, len: u32) -> VarBytes {
         if len < 16 {
-            [0x90 | (len as u8 & 0x0f)].into()
+            [C_FIXARR0 | (len as u8 & 0x0f)].into()
         } else if len < 65536 {
-            let mut out = [0xd9, 0, 0];
+            let mut out = [C_ARR16, 0, 0];
             out[1..3].copy_from_slice(&(len as u16).to_be_bytes());
             out.into()
         } else {
-            let mut out = [0xdd, 0, 0, 0, 0];
+            let mut out = [C_ARR32, 0, 0, 0, 0];
             out[1..5].copy_from_slice(&len.to_be_bytes());
             out.into()
         }
@@ -255,13 +226,13 @@ impl Encoder {
     /// This should be the number of key/value pairs in the map
     pub fn enc_map_len(&mut self, len: u32) -> VarBytes {
         if len < 16 {
-            [0x80 | (len as u8 & 0x0f)].into()
+            [C_FIXMAP0 | (len as u8 & 0x0f)].into()
         } else if len < 65536 {
-            let mut out = [0xde, 0, 0];
+            let mut out = [C_MAP16, 0, 0];
             out[1..3].copy_from_slice(&(len as u16).to_be_bytes());
             out.into()
         } else {
-            let mut out = [0xdf, 0, 0, 0, 0];
+            let mut out = [C_MAP32, 0, 0, 0, 0];
             out[1..5].copy_from_slice(&len.to_be_bytes());
             out.into()
         }
@@ -272,23 +243,23 @@ impl Encoder {
     /// just copy them directly into your buffer
     pub fn enc_ext_len(&mut self, len: u32, t: i8) -> VarBytes {
         if len == 1 {
-            [0xd4, t as u8].into()
+            [C_FIXEXT1, t as u8].into()
         } else if len == 2 {
-            [0xd5, t as u8].into()
+            [C_FIXEXT2, t as u8].into()
         } else if len == 4 {
-            [0xd6, t as u8].into()
+            [C_FIXEXT4, t as u8].into()
         } else if len == 8 {
-            [0xd7, t as u8].into()
+            [C_FIXEXT8, t as u8].into()
         } else if len == 16 {
-            [0xd8, t as u8].into()
+            [C_FIXEXT16, t as u8].into()
         } else if len < 256 {
-            [0xd8, len as u8, t as u8].into()
+            [C_EXT8, len as u8, t as u8].into()
         } else if len < 65536 {
-            let mut out = [0xc9, 0, 0, t as u8];
+            let mut out = [C_EXT16, 0, 0, t as u8];
             out[1..3].copy_from_slice(&(len as u16).to_be_bytes());
             out.into()
         } else {
-            let mut out = [0xc9, 0, 0, 0, 0, t as u8];
+            let mut out = [C_EXT32, 0, 0, 0, 0, t as u8];
             out[1..5].copy_from_slice(&len.to_be_bytes());
             out.into()
         }

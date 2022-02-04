@@ -64,6 +64,10 @@
 #![deny(missing_docs)]
 #![deny(warnings)]
 
+pub(crate) mod const_;
+
+pub mod num;
+
 pub mod decode;
 pub mod encode;
 
