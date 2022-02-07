@@ -132,3 +132,73 @@ impl From<Vec<u8>> for DynProducerAsync<'_> {
         Box::new(X(buf, true))
     }
 }
+
+pub(crate) enum OwnedToken {
+    Bin(Box<[u8]>),
+    Str(Box<[u8]>),
+    Ext(i8, Box<[u8]>),
+    Arr(u32),
+    Map(u32),
+    Nil,
+    Bool(bool),
+    Num(Num),
+}
+
+pub(crate) struct OwnedDecoder {
+    dec: msgpackin_core::decode::Decoder,
+    len_type: msgpackin_core::decode::LenType,
+    buf: Vec<u8>,
+}
+
+impl Default for OwnedDecoder {
+    fn default() -> Self {
+        Self {
+            dec: msgpackin_core::decode::Decoder::new(),
+            len_type: msgpackin_core::decode::LenType::Bin,
+            buf: Vec::new(),
+        }
+    }
+}
+
+impl OwnedDecoder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn next_bytes_min(&self) -> u32 {
+        self.dec.next_bytes_min()
+    }
+
+    pub fn parse(&mut self, data: &[u8]) -> Vec<OwnedToken> {
+        let Self { dec, len_type, buf } = self;
+        let mut tokens = Vec::new();
+        for token in dec.parse(data) {
+            use msgpackin_core::decode::LenType;
+            use msgpackin_core::decode::Token::*;
+            match token {
+                Len(LenType::Arr, len) => tokens.push(OwnedToken::Arr(len)),
+                Len(LenType::Map, len) => tokens.push(OwnedToken::Map(len)),
+                Len(t, len) => *len_type = t,
+                Nil => tokens.push(OwnedToken::Nil),
+                Bool(b) => tokens.push(OwnedToken::Bool(b)),
+                Num(n) => tokens.push(OwnedToken::Num(n)),
+                BinCont(data, _) => buf.extend_from_slice(data),
+                Bin(data) => {
+                    let owned_data = if buf.is_empty() {
+                        data.to_vec().into_boxed_slice()
+                    } else {
+                        buf.extend_from_slice(data);
+                        mem::replace(buf, Vec::new()).into_boxed_slice()
+                    };
+                    match len_type {
+                        LenType::Bin => tokens.push(OwnedToken::Bin(owned_data)),
+                        LenType::Str => tokens.push(OwnedToken::Str(owned_data)),
+                        LenType::Ext(t) => tokens.push(OwnedToken::Ext(*t, owned_data)),
+                        _ => unreachable!(), // is it?
+                    }
+                }
+            }
+        }
+        tokens
+    }
+}

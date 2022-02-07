@@ -26,6 +26,7 @@ mod lib {
     pub use self::core::iter;
     pub use self::core::pin;
     pub use self::core::result;
+    pub use self::core::mem;
 
     #[cfg(not(feature = "std"))]
     pub use alloc::vec::Vec;

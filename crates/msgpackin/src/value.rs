@@ -173,11 +173,14 @@ impl Value {
 
     /// Decode a Value from something that can be converted
     /// into a DynProducerSync, such as a byte array slice (`&[u8]`)
-    pub fn from_sync_config<'a, P>(_p: P, _config: Config) -> Result<Self>
+    pub fn from_sync_config<'a, P>(p: P, _config: Config) -> Result<Self>
     where
         P: Into<DynProducerSync<'a>>,
     {
-        unimplemented!()
+        let mut owned_dec = OwnedDecoder::new();
+        while let Ok(Some(data)) = p.read_next(owned_dec.next_bytes_min()) {
+
+        }
     }
 
     /// Encode this value as message pack data to the given consumer.
