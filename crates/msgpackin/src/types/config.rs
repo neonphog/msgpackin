@@ -1,6 +1,6 @@
 /// Msgpackin config for encoders / decoders
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// maximum container depth when encoding / decoding
     pub max_depth: usize,

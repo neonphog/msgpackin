@@ -28,22 +28,21 @@ impl<'buf> From<&'buf [u8]> for DynProducerComplete<'buf> {
 }
 
 /// Trait representing a data provider that provides data in synchronous chunks
-pub trait AsProducerSync<'lt> {
+pub trait AsProducerSync {
     /// Read the next chunk of data
-    fn read_next<'a>(&'a mut self, len_hint: usize)
-        -> Result<Option<&'a [u8]>>;
+    fn read_next<'a>(&'a mut self, len_hint: u32) -> Result<Option<&'a [u8]>>;
 }
 
 /// Type alias for AsProducerSync trait object
-pub type DynProducerSync<'lt> = Box<dyn AsProducerSync<'lt> + 'lt>;
+pub type DynProducerSync<'lt> = Box<dyn AsProducerSync + 'lt>;
 
 impl<'lt> From<&'lt [u8]> for DynProducerSync<'lt> {
     fn from(buf: &'lt [u8]) -> Self {
         struct X<'lt>(&'lt [u8], bool);
-        impl<'lt> AsProducerSync<'lt> for X<'lt> {
+        impl<'lt> AsProducerSync for X<'lt> {
             fn read_next<'a>(
                 &'a mut self,
-                _len_hint: usize,
+                _len_hint: u32,
             ) -> Result<Option<&'a [u8]>> {
                 if self.1 {
                     self.1 = false;
@@ -60,10 +59,10 @@ impl<'lt> From<&'lt [u8]> for DynProducerSync<'lt> {
 impl From<Vec<u8>> for DynProducerSync<'_> {
     fn from(buf: Vec<u8>) -> Self {
         struct X(Vec<u8>, bool);
-        impl<'lt> AsProducerSync<'lt> for X {
+        impl AsProducerSync for X {
             fn read_next<'a>(
                 &'a mut self,
-                _len_hint: usize,
+                _len_hint: u32,
             ) -> Result<Option<&'a [u8]>> {
                 if self.1 {
                     self.1 = false;
@@ -78,24 +77,24 @@ impl From<Vec<u8>> for DynProducerSync<'_> {
 }
 
 /// Trait representing a data provider that provides data in async chunks
-pub trait AsProducerAsync<'lt> {
+pub trait AsProducerAsync {
     /// Read the next chunk of data
     fn read_next<'a>(
         &'a mut self,
-        len_hint: usize,
+        len_hint: u32,
     ) -> BoxFut<'a, Option<&'a [u8]>>;
 }
 
 /// Type alias for AsProducerAsync trait object
-pub type DynProducerAsync<'lt> = Box<dyn AsProducerAsync<'lt> + 'lt>;
+pub type DynProducerAsync<'lt> = Box<dyn AsProducerAsync + 'lt>;
 
 impl<'lt> From<&'lt [u8]> for DynProducerAsync<'lt> {
     fn from(buf: &'lt [u8]) -> Self {
         struct X<'lt>(&'lt [u8], bool);
-        impl<'lt> AsProducerAsync<'lt> for X<'lt> {
+        impl<'lt> AsProducerAsync for X<'lt> {
             fn read_next<'a>(
                 &'a mut self,
-                _len_hint: usize,
+                _len_hint: u32,
             ) -> BoxFut<'a, Option<&'a [u8]>> {
                 Box::pin(async move {
                     if self.1 {
@@ -114,10 +113,10 @@ impl<'lt> From<&'lt [u8]> for DynProducerAsync<'lt> {
 impl From<Vec<u8>> for DynProducerAsync<'_> {
     fn from(buf: Vec<u8>) -> Self {
         struct X(Vec<u8>, bool);
-        impl<'lt> AsProducerAsync<'lt> for X {
+        impl AsProducerAsync for X {
             fn read_next<'a>(
                 &'a mut self,
-                _len_hint: usize,
+                _len_hint: u32,
             ) -> BoxFut<'a, Option<&'a [u8]>> {
                 Box::pin(async move {
                     if self.1 {
@@ -144,61 +143,76 @@ pub(crate) enum OwnedToken {
     Num(Num),
 }
 
-pub(crate) struct OwnedDecoder {
-    dec: msgpackin_core::decode::Decoder,
-    len_type: msgpackin_core::decode::LenType,
-    buf: Vec<u8>,
+macro_rules! stub_wrap {
+    ($($t:tt)*) => { $($t)* };
 }
 
-impl Default for OwnedDecoder {
-    fn default() -> Self {
-        Self {
-            dec: msgpackin_core::decode::Decoder::new(),
-            len_type: msgpackin_core::decode::LenType::Bin,
-            buf: Vec::new(),
-        }
-    }
+macro_rules! async_wrap {
+    ($($t:tt)*) => { Box::pin(async move { $($t)* }) };
 }
 
-impl OwnedDecoder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn next_bytes_min(&self) -> u32 {
-        self.dec.next_bytes_min()
-    }
-
-    pub fn parse(&mut self, data: &[u8]) -> Vec<OwnedToken> {
-        let Self { dec, len_type, buf } = self;
-        let mut tokens = Vec::new();
-        for token in dec.parse(data) {
-            use msgpackin_core::decode::LenType;
-            use msgpackin_core::decode::Token::*;
-            match token {
-                Len(LenType::Arr, len) => tokens.push(OwnedToken::Arr(len)),
-                Len(LenType::Map, len) => tokens.push(OwnedToken::Map(len)),
-                Len(t, len) => *len_type = t,
-                Nil => tokens.push(OwnedToken::Nil),
-                Bool(b) => tokens.push(OwnedToken::Bool(b)),
-                Num(n) => tokens.push(OwnedToken::Num(n)),
-                BinCont(data, _) => buf.extend_from_slice(data),
-                Bin(data) => {
-                    let owned_data = if buf.is_empty() {
-                        data.to_vec().into_boxed_slice()
-                    } else {
-                        buf.extend_from_slice(data);
-                        mem::replace(buf, Vec::new()).into_boxed_slice()
-                    };
-                    match len_type {
-                        LenType::Bin => tokens.push(OwnedToken::Bin(owned_data)),
-                        LenType::Str => tokens.push(OwnedToken::Str(owned_data)),
-                        LenType::Ext(t) => tokens.push(OwnedToken::Ext(*t, owned_data)),
-                        _ => unreachable!(), // is it?
+macro_rules! mk_decode_owned {
+    (
+        $id:ident,
+        ($($prod:tt)*),
+        ($($await:tt)*),
+        ($($ret:tt)*),
+        $wrap:ident,
+    ) => {
+        pub(crate) fn $id<'func, 'prod>(
+            out: &'func mut Vec<OwnedToken>,
+            dec: &'func mut msgpackin_core::decode::Decoder,
+            prod: &'func mut $($prod)*,
+            _config: &'func Config,
+        ) -> $($ret)* {$wrap! {
+            let mut len_type = msgpackin_core::decode::LenType::Bin;
+            let mut buf = Vec::new();
+            while let Some(data) = prod.read_next(dec.next_bytes_min())$($await)*? {
+                for token in dec.parse(data) {
+                    use msgpackin_core::decode::LenType;
+                    use msgpackin_core::decode::Token::*;
+                    match token {
+                        Len(LenType::Arr, len) => out.push(OwnedToken::Arr(len)),
+                        Len(LenType::Map, len) => out.push(OwnedToken::Map(len)),
+                        Len(t, _len) => len_type = t,
+                        Nil => out.push(OwnedToken::Nil),
+                        Bool(b) => out.push(OwnedToken::Bool(b)),
+                        Num(n) => out.push(OwnedToken::Num(n)),
+                        BinCont(data, _) => buf.extend_from_slice(data),
+                        Bin(data) => {
+                            let owned_data = if buf.is_empty() {
+                                data.to_vec().into_boxed_slice()
+                            } else {
+                                buf.extend_from_slice(data);
+                                mem::take(&mut buf).into_boxed_slice()
+                            };
+                            match len_type {
+                                LenType::Bin => out.push(OwnedToken::Bin(owned_data)),
+                                LenType::Str => out.push(OwnedToken::Str(owned_data)),
+                                LenType::Ext(t) => out.push(OwnedToken::Ext(t, owned_data)),
+                                _ => unreachable!(), // is it?
+                            }
+                        }
                     }
                 }
             }
-        }
-        tokens
-    }
+            Ok(())
+        }}
+    };
 }
+
+mk_decode_owned!(
+    priv_decode_owned_sync,
+    (DynProducerSync<'prod>),
+    (),
+    (Result<()>),
+    stub_wrap,
+);
+
+mk_decode_owned!(
+    priv_decode_owned_async,
+    (DynProducerAsync<'prod>),
+    (.await),
+    (BoxFut<'func, ()>),
+    async_wrap,
+);

@@ -51,6 +51,11 @@ impl<'a> From<Cow<'a, str>> for Utf8Str {
 }
 
 impl Utf8Str {
+    /// Get a Utf8StrRef from this instance
+    pub fn as_ref(&self) -> Utf8StrRef {
+        self.into()
+    }
+
     /// Attempt to get this string as a `&str`
     pub fn as_str(&self) -> Result<&str> {
         lib::core::str::from_utf8(&self.0).map_err(|_| Error::EInvalidUtf8)
@@ -161,183 +166,148 @@ impl From<Vec<u8>> for Value {
     }
 }
 
+fn priv_decode<'func, 'prod>(
+    iter: &mut (impl Iterator<Item = OwnedToken> + 'func),
+    config: &Config,
+) -> Result<Value> {
+    match iter.next() {
+        Some(OwnedToken::Nil) => Ok(Value::Nil),
+        Some(OwnedToken::Bool(b)) => Ok(Value::Bool(b)),
+        Some(OwnedToken::Num(n)) => Ok(Value::Num(n)),
+        Some(OwnedToken::Bin(b)) => Ok(Value::Bin(b)),
+        Some(OwnedToken::Str(s)) => Ok(Value::Str(Utf8Str(s))),
+        Some(OwnedToken::Ext(t, d)) => Ok(Value::Ext(t, d)),
+        Some(OwnedToken::Arr(l)) => {
+            let mut arr = Vec::with_capacity(l as usize);
+            for _ in 0..l {
+                arr.push(priv_decode(iter, config)?);
+            }
+            Ok(Value::Arr(arr))
+        }
+        Some(OwnedToken::Map(l)) => {
+            let mut map = Vec::with_capacity(l as usize);
+            for _ in 0..l {
+                let key = priv_decode(iter, config)?;
+                let val = priv_decode(iter, config)?;
+                map.push((key, val));
+            }
+            Ok(Value::Map(map))
+        }
+        None => Err(Error::EDecode {
+            expected: "Marker".into(),
+            got: "UnexpectedEOF".into(),
+        }),
+    }
+}
+
 impl Value {
-    /// Decode a Value from something that can be converted
-    /// into a DynProducerSync, such as a byte array slice (`&[u8]`)
-    pub fn from_sync<'a, P>(p: P) -> Result<Self>
-    where
-        P: Into<DynProducerSync<'a>>,
-    {
-        Self::from_sync_config(p, Config::default())
-    }
-
-    /// Decode a Value from something that can be converted
-    /// into a DynProducerSync, such as a byte array slice (`&[u8]`)
-    pub fn from_sync_config<'a, P>(p: P, _config: Config) -> Result<Self>
-    where
-        P: Into<DynProducerSync<'a>>,
-    {
-        let mut owned_dec = OwnedDecoder::new();
-        while let Ok(Some(data)) = p.read_next(owned_dec.next_bytes_min()) {
-
-        }
+    /// Get a ValueRef from this instance
+    pub fn as_ref(&self) -> ValueRef {
+        self.into()
     }
 
     /// Encode this value as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync<'a, C>(&'a self, c: C) -> Result<()>
+    pub fn encode_sync<'con, C>(&self, c: C) -> Result<()>
     where
-        C: Into<DynConsumerSync<'a>>,
+        C: Into<DynConsumerSync<'con>>,
     {
-        self.encode_sync_config(c, Config::default())
+        self.encode_sync_config(c, &Config::default())
     }
 
     /// Encode this value as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync_config<'a, C>(
-        &'a self,
+    pub fn encode_sync_config<'con, C>(
+        &self,
         c: C,
-        _config: Config,
+        config: &Config,
     ) -> Result<()>
     where
-        C: Into<DynConsumerSync<'a>>,
+        C: Into<DynConsumerSync<'con>>,
     {
-        let enc = msgpackin_core::encode::Encoder::new();
-        let c = c.into();
-
-        struct W<'lt> {
-            enc: msgpackin_core::encode::Encoder,
-            c: DynConsumerSync<'lt>,
-        }
-
-        impl W<'_> {
-            fn write_marker(&mut self, value: &Value) -> Result<()> {
-                let Self { enc, c } = self;
-                match value {
-                    Value::Nil => c.write(&enc.enc_nil()),
-                    Value::Bool(b) => c.write(&enc.enc_bool(*b)),
-                    Value::Num(n) => c.write(&enc.enc_num(*n)),
-                    Value::Bin(data) => {
-                        c.write(&enc.enc_bin_len(data.len() as u32))?;
-                        c.write(data)
-                    }
-                    Value::Str(data) => {
-                        c.write(&enc.enc_str_len(data.0.len() as u32))?;
-                        c.write(&data.0)
-                    }
-                    Value::Ext(ext_type, data) => {
-                        c.write(
-                            &enc.enc_ext_len(data.len() as u32, *ext_type),
-                        )?;
-                        c.write(data)
-                    }
-                    Value::Arr(a) => {
-                        c.write(&enc.enc_arr_len(a.len() as u32))?;
-                        for item in a.iter() {
-                            self.write_marker(item)?;
-                        }
-                        Ok(())
-                    }
-                    Value::Map(m) => {
-                        c.write(&enc.enc_map_len(m.len() as u32))?;
-                        for (key, value) in m.iter() {
-                            self.write_marker(key)?;
-                            self.write_marker(value)?;
-                        }
-                        Ok(())
-                    }
-                }
-            }
-        }
-
-        let mut w = W { enc, c };
-
-        w.write_marker(self)
+        ValueRef::from(self).encode_sync_config(c, config)
     }
 
     /// Encode this value as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async<'a, C>(&'a self, c: C) -> Result<()>
+    pub async fn encode_async<'con, C>(&self, c: C) -> Result<()>
     where
-        C: Into<DynConsumerAsync<'a>>,
+        C: Into<DynConsumerAsync<'con>>,
     {
-        self.encode_async_config(c, Config::default()).await
+        self.encode_async_config(c, &Config::default()).await
     }
 
     /// Encode this value as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async_config<'a, C>(
-        &'a self,
+    pub async fn encode_async_config<'con, C>(
+        &self,
         c: C,
-        _config: Config,
+        config: &Config,
     ) -> Result<()>
     where
-        C: Into<DynConsumerAsync<'a>>,
+        C: Into<DynConsumerAsync<'con>>,
     {
-        let enc = msgpackin_core::encode::Encoder::new();
-        let c = c.into();
+        ValueRef::from(self).encode_async_config(c, config).await
+    }
 
-        struct W<'lt> {
-            enc: msgpackin_core::encode::Encoder,
-            c: DynConsumerAsync<'lt>,
-        }
+    /// Decode a Value from something that can be converted
+    /// into a DynProducerSync, such as a byte array slice (`&[u8]`)
+    pub fn from_sync<'prod, P>(p: P) -> Result<Self>
+    where
+        P: Into<DynProducerSync<'prod>>,
+    {
+        Self::from_sync_config(p, &Config::default())
+    }
 
-        impl W<'_> {
-            fn write_marker<'a>(
-                &'a mut self,
-                value: &'a Value,
-            ) -> BoxFut<'a, ()> {
-                Box::pin(async move {
-                    let Self { enc, c } = self;
-                    match value {
-                        Value::Nil => c.write(&enc.enc_nil()).await,
-                        Value::Bool(b) => c.write(&enc.enc_bool(*b)).await,
-                        Value::Num(n) => c.write(&enc.enc_num(*n)).await,
-                        Value::Bin(data) => {
-                            c.write(&enc.enc_bin_len(data.len() as u32))
-                                .await?;
-                            c.write(data).await
-                        }
-                        Value::Str(data) => {
-                            c.write(&enc.enc_str_len(data.0.len() as u32))
-                                .await?;
-                            c.write(&data.0).await
-                        }
-                        Value::Ext(ext_type, data) => {
-                            c.write(
-                                &enc.enc_ext_len(data.len() as u32, *ext_type),
-                            )
-                            .await?;
-                            c.write(data).await
-                        }
-                        Value::Arr(a) => {
-                            c.write(&enc.enc_arr_len(a.len() as u32)).await?;
-                            for item in a.iter() {
-                                self.write_marker(item).await?;
-                            }
-                            Ok(())
-                        }
-                        Value::Map(m) => {
-                            c.write(&enc.enc_map_len(m.len() as u32)).await?;
-                            for (key, value) in m.iter() {
-                                self.write_marker(key).await?;
-                                self.write_marker(value).await?;
-                            }
-                            Ok(())
-                        }
-                    }
-                })
-            }
-        }
+    /// Decode a Value from something that can be converted
+    /// into a DynProducerSync, such as a byte array slice (`&[u8]`)
+    pub fn from_sync_config<'prod, P>(p: P, config: &Config) -> Result<Self>
+    where
+        P: Into<DynProducerSync<'prod>>,
+    {
+        let mut tokens = Vec::new();
+        let mut dec = msgpackin_core::decode::Decoder::new();
+        let mut p = p.into();
+        priv_decode_owned_sync(&mut tokens, &mut dec, &mut p, config)?;
+        let mut iter = tokens.into_iter();
+        priv_decode(&mut iter, config)
+    }
 
-        let mut w = W { enc, c };
+    /// Decode a Value from something that can be converted
+    /// into a DynProducerAsync, such as a byte array slice (`&[u8]`)
+    pub async fn from_async<'prod, P>(p: P) -> Result<Self>
+    where
+        P: Into<DynProducerAsync<'prod>>,
+    {
+        Self::from_async_config(p, &Config::default()).await
+    }
 
-        w.write_marker(self).await
+    /// Decode a Value from something that can be converted
+    /// into a DynProducerAsync, such as a byte array slice (`&[u8]`)
+    pub async fn from_async_config<'prod, P>(
+        p: P,
+        config: &Config,
+    ) -> Result<Self>
+    where
+        P: Into<DynProducerAsync<'prod>>,
+    {
+        let mut tokens = Vec::new();
+        let mut dec = msgpackin_core::decode::Decoder::new();
+        let mut p = p.into();
+        priv_decode_owned_async(&mut tokens, &mut dec, &mut p, config).await?;
+        let mut iter = tokens.into_iter();
+        priv_decode(&mut iter, config)
     }
 }
 
 /// MessagePack Utf8 String Reference type
 pub struct Utf8StrRef<'lt>(pub &'lt [u8]);
+
+impl<'a> From<&'a Utf8Str> for Utf8StrRef<'a> {
+    fn from(s: &'a Utf8Str) -> Self {
+        Utf8StrRef(&s.0)
+    }
+}
 
 impl fmt::Debug for Utf8StrRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -396,6 +366,99 @@ pub enum ValueRef<'lt> {
     /// MessagePack `Ext` type
     Ext(i8, &'lt [u8]),
 }
+
+impl<'a> From<&'a Value> for ValueRef<'a> {
+    fn from(v: &'a Value) -> Self {
+        match v {
+            Value::Nil => ValueRef::Nil,
+            Value::Bool(b) => ValueRef::Bool(*b),
+            Value::Num(n) => ValueRef::Num(*n),
+            Value::Bin(data) => ValueRef::Bin(data),
+            Value::Str(data) => ValueRef::Str(data.into()),
+            Value::Ext(t, data) => ValueRef::Ext(*t, data),
+            Value::Arr(a) => ValueRef::Arr(a.iter().map(Into::into).collect()),
+            Value::Map(m) => ValueRef::Map(
+                m.iter().map(|(k, v)| (k.into(), v.into())).collect(),
+            ),
+        }
+    }
+}
+
+macro_rules! stub_wrap {
+    ($($t:tt)*) => { $($t)* };
+}
+
+macro_rules! async_wrap {
+    ($($t:tt)*) => { Box::pin(async move { $($t)* }) };
+}
+
+macro_rules! mk_encode {
+    (
+        $id:ident,
+        ($($con:tt)*),
+        ($($await:tt)*),
+        ($($ret:tt)*),
+        $wrap:ident,
+    ) => {
+        fn $id<'func, 'con>(
+            val: &'func ValueRef,
+            enc: &'func mut msgpackin_core::encode::Encoder,
+            con: &'func mut $($con)*,
+            config: &'func Config,
+        ) -> $($ret)* {$wrap! {
+            match val {
+                ValueRef::Nil => con.write(&enc.enc_nil())$($await)*,
+                ValueRef::Bool(b) => con.write(&enc.enc_bool(*b))$($await)*,
+                ValueRef::Num(n) => con.write(&enc.enc_num(*n))$($await)*,
+                ValueRef::Bin(data) => {
+                    con.write(&enc.enc_bin_len(data.len() as u32))$($await)*?;
+                    con.write(data)$($await)*
+                }
+                ValueRef::Str(data) => {
+                    con.write(&enc.enc_str_len(data.0.len() as u32))$($await)*?;
+                    con.write(&data.0)$($await)*
+                }
+                ValueRef::Ext(t, data) => {
+                    con.write(
+                        &enc.enc_ext_len(data.len() as u32, *t),
+                    )$($await)*?;
+                    con.write(data)$($await)*
+                }
+                ValueRef::Arr(a) => {
+                    con.write(&enc.enc_arr_len(a.len() as u32))$($await)*?;
+                    for item in a.iter() {
+                        $id(item, enc, con, config)$($await)*?;
+                    }
+                    Ok(())
+                }
+                ValueRef::Map(m) => {
+                    con.write(&enc.enc_map_len(m.len() as u32))$($await)*?;
+                    for (key, value) in m.iter() {
+                        $id(key, enc, con, config)$($await)*?;
+                        $id(value, enc, con, config)$($await)*?;
+                    }
+                    Ok(())
+                }
+            }
+        }}
+    };
+}
+
+mk_encode!(
+    priv_encode_sync,
+    (DynConsumerSync<'con>),
+    (),
+    (Result<()>),
+    stub_wrap,
+);
+
+mk_encode!(
+    priv_encode_async,
+    (DynConsumerAsync<'con>),
+    (.await),
+    (BoxFut<'func, ()>),
+    async_wrap,
+);
 
 struct VRDecode<'dec, 'buf> {
     iter: msgpackin_core::decode::TokenIter<'dec, 'buf>,
@@ -471,21 +534,70 @@ impl<'dec, 'buf> VRDecode<'dec, 'buf> {
 }
 
 impl<'lt> ValueRef<'lt> {
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub fn encode_sync<'con, C>(&self, c: C) -> Result<()>
+    where
+        C: Into<DynConsumerSync<'con>>,
+    {
+        self.encode_sync_config(c, &Config::default())
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub fn encode_sync_config<'con, C>(
+        &self,
+        c: C,
+        config: &Config,
+    ) -> Result<()>
+    where
+        C: Into<DynConsumerSync<'con>>,
+    {
+        let mut enc = msgpackin_core::encode::Encoder::new();
+        let mut c = c.into();
+        priv_encode_sync(self, &mut enc, &mut c, config)
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub async fn encode_async<'con, C>(&self, c: C) -> Result<()>
+    where
+        C: Into<DynConsumerAsync<'con>>,
+    {
+        self.encode_async_config(c, &Config::default()).await
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub async fn encode_async_config<'con, C>(
+        &self,
+        c: C,
+        config: &Config,
+    ) -> Result<()>
+    where
+        C: Into<DynConsumerAsync<'con>>,
+    {
+        let mut enc = msgpackin_core::encode::Encoder::new();
+        let mut c = c.into();
+        priv_encode_async(self, &mut enc, &mut c, config).await
+    }
+
     /// Decode a ValueRef from something that can be converted
     /// into a DynProducerComplete, such as a byte array slice (`&[u8]`)
     pub fn from_ref<P>(p: P) -> Result<Self>
     where
         P: Into<DynProducerComplete<'lt>>,
     {
-        Self::from_ref_config(p, Config::default())
+        Self::from_ref_config(p, &Config::default())
     }
 
     /// Decode a ValueRef from something that can be converted
     /// into a DynProducerComplete, such as a byte array slice (`&[u8]`)
-    pub fn from_ref_config<P>(p: P, _config: Config) -> Result<Self>
+    pub fn from_ref_config<P>(p: P, config: &Config) -> Result<Self>
     where
         P: Into<DynProducerComplete<'lt>>,
     {
+        let _config = config;
         let mut dec = msgpackin_core::decode::Decoder::new();
         let mut dec = VRDecode {
             iter: dec.parse(p.into().read_all()?),
