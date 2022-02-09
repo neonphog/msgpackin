@@ -198,7 +198,7 @@ impl Decoder {
     /// Returns the minimum bytes required to do the next atomic decode.
     /// Note the decoder will work fine if you pass less or more,
     /// but it may result in a partial decode requiring you to do some
-    /// memory copying to read a string, for example.
+    /// memory copying to read a string, for example
     pub fn next_bytes_min(&self) -> u32 {
         self.state.next_bytes_min()
     }

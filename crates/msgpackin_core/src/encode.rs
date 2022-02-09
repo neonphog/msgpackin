@@ -140,34 +140,36 @@ impl Encoder {
             [i as u8].into()
         } else if i > -32 && i < 0 {
             [i as i8 as u8].into()
+        } else if i >= u8::MIN as i128 && i <= u8::MAX as i128 {
+            [C_U8, i as u8].into()
         } else if i >= i8::MIN as i128 && i <= i8::MAX as i128 {
             [C_I8, i as u8].into()
+        } else if i >= u16::MIN as i128 && i <= u16::MAX as i128 {
+            let mut out = [C_U16, 0, 0];
+            out[1..3].copy_from_slice(&(i as u16).to_be_bytes());
+            out.into()
         } else if i >= i16::MIN as i128 && i <= i16::MAX as i128 {
             let mut out = [C_I16, 0, 0];
             out[1..3].copy_from_slice(&(i as i16).to_be_bytes());
+            out.into()
+        } else if i >= u32::MIN as i128 && i <= u32::MAX as i128 {
+            let mut out = [C_U32, 0, 0, 0, 0];
+            out[1..5].copy_from_slice(&(i as u32).to_be_bytes());
             out.into()
         } else if i >= i32::MIN as i128 && i <= i32::MAX as i128 {
             let mut out = [C_I32, 0, 0, 0, 0];
             out[1..5].copy_from_slice(&(i as i32).to_be_bytes());
             out.into()
-        } else if i <= i64::MAX as i128 {
-            let mut out = [C_I64, 0, 0, 0, 0, 0, 0, 0, 0];
-            out[1..9].copy_from_slice(&(i as i64).to_be_bytes());
-            out.into()
-        } else if i <= u8::MAX as i128 {
-            [C_U8, i as u8].into()
-        } else if i <= u16::MAX as i128 {
-            let mut out = [C_U16, 0, 0];
-            out[1..3].copy_from_slice(&(i as u16).to_be_bytes());
-            out.into()
-        } else if i <= u32::MAX as i128 {
-            let mut out = [C_U32, 0, 0, 0, 0];
-            out[1..5].copy_from_slice(&(i as u32).to_be_bytes());
-            out.into()
-        } else {
+        } else if i >= u64::MIN as i128 && i <= u64::MAX as i128 {
             let mut out = [C_U64, 0, 0, 0, 0, 0, 0, 0, 0];
             out[1..9].copy_from_slice(&(i as u64).to_be_bytes());
             out.into()
+        } else if i >= i64::MIN as i128 && i <= i64::MAX as i128 {
+            let mut out = [C_I64, 0, 0, 0, 0, 0, 0, 0, 0];
+            out[1..9].copy_from_slice(&(i as i64).to_be_bytes());
+            out.into()
+        } else {
+            unreachable!()
         }
     }
 

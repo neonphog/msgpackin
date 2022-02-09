@@ -114,7 +114,9 @@ impl<'lt> From<&'lt [u8]> for DynProducerAsync<'lt> {
 }
 
 #[cfg(all(feature = "std", feature = "futures-io", not(feature = "tokio")))]
-impl<'lt, R: futures_io::AsyncRead + Unpin + 'lt> From<R> for DynProducerAsync<'lt> {
+impl<'lt, R: futures_io::AsyncRead + Unpin + 'lt> From<R>
+    for DynProducerAsync<'lt>
+{
     fn from(r: R) -> Self {
         struct X<R: futures_io::AsyncRead + Unpin>(R, [u8; 4096]);
         impl<R: futures_io::AsyncRead + Unpin> AsProducerAsync for X<R> {
@@ -124,10 +126,7 @@ impl<'lt, R: futures_io::AsyncRead + Unpin + 'lt> From<R> for DynProducerAsync<'
             ) -> BoxFut<'a, Option<&'a [u8]>> {
                 Box::pin(async move {
                     let Self(r, buf) = self;
-                    let r = read::Read {
-                        reader: r,
-                        buf,
-                    };
+                    let r = read::Read { reader: r, buf };
                     match r.await {
                         Ok(0) => Ok(None),
                         Ok(size) => Ok(Some(&buf[..size])),
@@ -141,7 +140,9 @@ impl<'lt, R: futures_io::AsyncRead + Unpin + 'lt> From<R> for DynProducerAsync<'
 }
 
 #[cfg(all(feature = "std", feature = "tokio"))]
-impl<'lt, R: tokio::io::AsyncRead + Unpin + 'lt> From<R> for DynProducerAsync<'lt> {
+impl<'lt, R: tokio::io::AsyncRead + Unpin + 'lt> From<R>
+    for DynProducerAsync<'lt>
+{
     fn from(r: R) -> Self {
         struct X<R: tokio::io::AsyncRead + Unpin>(R, [u8; 4096]);
         impl<R: tokio::io::AsyncRead + Unpin> AsProducerAsync for X<R> {
@@ -151,10 +152,7 @@ impl<'lt, R: tokio::io::AsyncRead + Unpin + 'lt> From<R> for DynProducerAsync<'l
             ) -> BoxFut<'a, Option<&'a [u8]>> {
                 Box::pin(async move {
                     let Self(r, buf) = self;
-                    let r = read::Read {
-                        reader: r,
-                        buf,
-                    };
+                    let r = read::Read { reader: r, buf };
                     match r.await {
                         Ok(0) => Ok(None),
                         Ok(size) => Ok(Some(&buf[..size])),
@@ -183,7 +181,10 @@ mod read {
     impl<R: futures_io::AsyncRead + ?Sized + Unpin> Future for Read<'_, R> {
         type Output = std::io::Result<usize>;
 
-        fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        fn poll(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Self::Output> {
             let this = &mut *self;
             use futures_io::AsyncRead;
             std::pin::Pin::new(&mut this.reader).poll_read(cx, this.buf)
@@ -194,14 +195,21 @@ mod read {
     impl<R: tokio::io::AsyncRead + ?Sized + Unpin> Future for Read<'_, R> {
         type Output = std::io::Result<usize>;
 
-        fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        fn poll(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Self::Output> {
             let this = &mut *self;
             use tokio::io::AsyncRead;
             let mut rb = tokio::io::ReadBuf::new(this.buf);
             match std::pin::Pin::new(&mut this.reader).poll_read(cx, &mut rb) {
-                std::task::Poll::Ready(Ok(_)) => std::task::Poll::Ready(Ok(rb.filled().len())),
+                std::task::Poll::Ready(Ok(_)) => {
+                    std::task::Poll::Ready(Ok(rb.filled().len()))
+                }
                 std::task::Poll::Pending => std::task::Poll::Pending,
-                std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
+                std::task::Poll::Ready(Err(e)) => {
+                    std::task::Poll::Ready(Err(e))
+                }
             }
         }
     }

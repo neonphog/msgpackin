@@ -63,7 +63,9 @@ impl<'lt> From<&'lt mut Vec<u8>> for DynConsumerAsync<'lt> {
 }
 
 #[cfg(all(feature = "std", feature = "tokio"))]
-impl<'lt, W: tokio::io::AsyncWrite + Unpin + 'lt> From<W> for DynConsumerAsync<'lt> {
+impl<'lt, W: tokio::io::AsyncWrite + Unpin + 'lt> From<W>
+    for DynConsumerAsync<'lt>
+{
     fn from(w: W) -> Self {
         struct X<W: tokio::io::AsyncWrite + Unpin>(W);
         impl<W: tokio::io::AsyncWrite + Unpin> AsConsumerAsync for X<W> {
@@ -83,7 +85,9 @@ impl<'lt, W: tokio::io::AsyncWrite + Unpin + 'lt> From<W> for DynConsumerAsync<'
 }
 
 #[cfg(all(feature = "std", feature = "futures-io", not(feature = "tokio")))]
-impl<'lt, W: futures_io::AsyncWrite + Unpin + 'lt> From<W> for DynConsumerAsync<'lt> {
+impl<'lt, W: futures_io::AsyncWrite + Unpin + 'lt> From<W>
+    for DynConsumerAsync<'lt>
+{
     fn from(w: W) -> Self {
         struct X<W: futures_io::AsyncWrite + Unpin>(W);
         impl<W: futures_io::AsyncWrite + Unpin> AsConsumerAsync for X<W> {
@@ -143,7 +147,7 @@ mod write_all {
                 }
                 if n == 0 {
                     return std::task::Poll::Ready(Err(
-                        std::io::ErrorKind::WriteZero.into()
+                        std::io::ErrorKind::WriteZero.into(),
                     ));
                 }
             }
@@ -172,7 +176,7 @@ mod write_all {
                 }
                 if n == 0 {
                     return std::task::Poll::Ready(Err(
-                        std::io::ErrorKind::WriteZero.into()
+                        std::io::ErrorKind::WriteZero.into(),
                     ));
                 }
             }

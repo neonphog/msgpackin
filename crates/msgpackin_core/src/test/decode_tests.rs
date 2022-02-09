@@ -338,7 +338,7 @@ fn decode_u8_pos_fixint() {
 
 #[test]
 fn decode_i8_neg_fixint() {
-    for i in -32..0 {
+    for i in -31..0 {
         let buf = [i as u8];
         let res = exec_decode_tests(&buf);
         assert!(

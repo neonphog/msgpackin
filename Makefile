@@ -1,4 +1,4 @@
-# Lair Makefile
+# Msgpackin Makefile
 
 .PHONY: all bump publish test tools tool_rust tool_fmt tool_readme
 

@@ -1,4 +1,17 @@
-//! no_std, no alloc, MessagePack Rust encode / decode library code
+//! Msgpackin pure Rust MessagePack `no_std` encoding / decoding library.
+//!
+//! If you are looking for Value types or serde integration,
+//! see the main msgpackin crate.
+//!
+//! This crate:
+//! - is written in pure Rust
+//! - has no dependencies
+//! - is always `#![no_std]` - there is no feature flag to enable std lib
+//! - never imports the `alloc` crate - there is no feature flag to do so
+//! - is infallible - there are no error types / Result types
+//!   - the one accommodation to make this happen is that the msgpack
+//!     "reserved" marker (`0xc1`) will be decoded as if it were a `Nil`
+//!     marker (`0xc0`)
 //!
 //! # Example
 //!

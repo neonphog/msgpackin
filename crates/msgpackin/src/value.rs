@@ -639,7 +639,8 @@ mod tests {
         let _dec = Value::from_sync(data.as_slice()).unwrap();
         let _dec = futures::executor::block_on(async {
             Value::from_async(data.as_slice()).await
-        }).unwrap();
+        })
+        .unwrap();
         //println!("decoded: {:?}", dec);
     }
 }
