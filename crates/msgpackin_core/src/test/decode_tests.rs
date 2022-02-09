@@ -290,8 +290,8 @@ fn decode_float_32() {
     for fixture in FIXTURE_FLOAT_32 {
         let res = exec_decode_tests(fixture.1);
         assert!(
-            matches!(res[0], Some(Token::F32(f)) if f == fixture.0),
-            "expect Some(F32({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(f)) if f == fixture.0),
+            "expect Some(Num({})), got: {:?}",
             fixture.0,
             res[0],
         );
@@ -312,8 +312,8 @@ fn decode_float_64() {
     for fixture in FIXTURE_FLOAT_64 {
         let res = exec_decode_tests(fixture.1);
         assert!(
-            matches!(res[0], Some(Token::F64(f)) if f == fixture.0),
-            "expect Some(F64({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(f)) if f == fixture.0),
+            "expect Some(Num({})), got: {:?}",
             fixture.0,
             res[0],
         );
@@ -327,8 +327,8 @@ fn decode_u8_pos_fixint() {
         let buf = [u];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::U8(ru)) if ru == u),
-            "expect Some(U8({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ru)) if ru == u as i128),
+            "expect Some(Num({})), got: {:?}",
             u,
             res[0],
         );
@@ -338,12 +338,12 @@ fn decode_u8_pos_fixint() {
 
 #[test]
 fn decode_i8_neg_fixint() {
-    for i in -32..0 {
+    for i in -31..0 {
         let buf = [i as u8];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::I8(ri)) if ri == i),
-            "expect Some(I8({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ri)) if ri == i as i128),
+            "expect Some(Num({})), got: {:?}",
             i,
             res[0],
         );
@@ -357,8 +357,8 @@ fn decode_u8() {
         let buf = [0xcc, u];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::U8(ru)) if ru == u),
-            "{:?} expect Some(U8({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ru)) if ru == u as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             u,
             res[0],
@@ -374,8 +374,8 @@ fn decode_u16() {
         let buf = [0xcd, bytes[0], bytes[1]];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::U16(ru)) if ru == u),
-            "{:?} expect Some(U16({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ru)) if ru == u as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             u,
             res[0],
@@ -391,8 +391,8 @@ fn decode_u32() {
         let buf = [0xce, bytes[0], bytes[1], bytes[2], bytes[3]];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::U32(ru)) if ru == u),
-            "{:?} expect Some(U32({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ru)) if ru == u as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             u,
             res[0],
@@ -411,8 +411,8 @@ fn decode_u64() {
         ];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::U64(ru)) if ru == u),
-            "{:?} expect Some(U64({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ru)) if ru == u as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             u,
             res[0],
@@ -427,8 +427,8 @@ fn decode_i8() {
         let buf = [0xd0, i as u8];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::I8(ri)) if ri == i),
-            "{:?} expect Some(I8({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ri)) if ri == i as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             i,
             res[0],
@@ -444,8 +444,8 @@ fn decode_i16() {
         let buf = [0xd1, bytes[0], bytes[1]];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::I16(ri)) if ri == i),
-            "{:?} expect Some(I16({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ri)) if ri == i as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             i,
             res[0],
@@ -461,8 +461,8 @@ fn decode_i32() {
         let buf = [0xd2, bytes[0], bytes[1], bytes[2], bytes[3]];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::I32(ri)) if ri == i),
-            "{:?} expect Some(I32({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ri)) if ri == i as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             i,
             res[0],
@@ -481,8 +481,8 @@ fn decode_i64() {
         ];
         let res = exec_decode_tests(&buf);
         assert!(
-            matches!(res[0], Some(Token::I64(ri)) if ri == i),
-            "{:?} expect Some(I64({})), got: {:?}",
+            matches!(res[0], Some(Token::Num(ri)) if ri == i as i128),
+            "{:?} expect Some(Num({})), got: {:?}",
             buf,
             i,
             res[0],

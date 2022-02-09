@@ -19,6 +19,16 @@ jobs:
         toolchain: [
           stable,
         ]
+        features: [
+          '',
+          '--no-default-features',
+          '--no-default-features --features serde',
+          '--no-default-features --features serde,std,serde_std',
+          '--no-default-features --features std,futures-io',
+          '--no-default-features --features std,tokio',
+          '--no-default-features --features std,tokio,futures-io',
+          '--no-default-features --features std,tokio,serde,serde_std',
+        ]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -28,26 +38,10 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
 
-      - name: Cargo Build
-        uses: actions-rs/cargo@v1
-        env:
-          RUST_BACKTRACE: 1
-        with:
-          command: build
-          args:
-
-      - name: Cargo Targets
-        uses: actions-rs/cargo@v1
-        env:
-          RUST_BACKTRACE: 1
-        with:
-          command: test
-          args: --all-targets --no-run
-
       - name: Cargo Test
         uses: actions-rs/cargo@v1
         env:
           RUST_BACKTRACE: 1
         with:
           command: test
-          args:
+          args: ${{ matrix.features }}

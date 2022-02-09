@@ -1,4 +1,4 @@
-# Lair Makefile
+# Msgpackin Makefile
 
 .PHONY: all bump publish test tools tool_rust tool_fmt tool_readme
 
@@ -32,11 +32,10 @@ publish: tools
 test: tools
 	$(ENV) cargo fmt -- --check
 	$(ENV) cargo clippy
-	$(ENV) RUST_BACKTRACE=1 cargo test --all-targets --no-run
-	$(ENV) RUST_BACKTRACE=1 cargo test
+	$(ENV) RUST_BACKTRACE=1 ./features-test.bash
 	$(ENV) cargo readme -r crates/msgpackin_core -o README.md
-	#$(ENV) cargo readme -r crates/msgpackin -o README.md
-	#$(ENV) cargo readme -r crates/msgpackin -o ../../README.md
+	$(ENV) cargo readme -r crates/msgpackin -o README.md
+	$(ENV) cargo readme -r crates/msgpackin -o ../../README.md
 	@if [ "${CI}x" != "x" ]; then git diff --exit-code; fi
 
 tools: tool_rust tool_fmt tool_clippy tool_readme
