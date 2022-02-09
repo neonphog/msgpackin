@@ -632,10 +632,14 @@ mod tests {
         futures::executor::block_on(async {
             map.encode_async(&mut data2).await.unwrap();
         });
-        println!("encoded: {}", String::from_utf8_lossy(&data));
+        //println!("encoded: {}", String::from_utf8_lossy(&data));
         assert_eq!(data, data2);
 
-        let dec = ValueRef::from_ref(data.as_slice()).unwrap();
-        println!("decoded: {:?}", dec);
+        let _dec = ValueRef::from_ref(data.as_slice()).unwrap();
+        let _dec = Value::from_sync(data.as_slice()).unwrap();
+        let _dec = futures::executor::block_on(async {
+            Value::from_async(data.as_slice()).await
+        }).unwrap();
+        //println!("decoded: {:?}", dec);
     }
 }

@@ -12,6 +12,16 @@ extern crate alloc;
 #[cfg(all(feature = "std", feature = "serde", not(feature = "serde_std")))]
 compile_error!("If features \"std\" and \"serde\" are enabled, feature \"serde_std\" must also be enabled. This workaround can be removed once weak dependency features are stable.");
 
+#[cfg(all(feature = "futures-io", not(feature = "std")))]
+compile_error!(
+    "You cannot enable feature \"futures-io\" without also enabling \"std\""
+);
+
+#[cfg(all(feature = "tokio", not(feature = "std")))]
+compile_error!(
+    "You cannot enable feature \"tokio\" without also enabling \"std\""
+);
+
 // lib facade
 mod lib {
     pub mod core {
