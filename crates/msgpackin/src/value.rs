@@ -5,7 +5,7 @@ use crate::producer::*;
 use crate::*;
 
 /// MessagePack Utf8 String Reference type
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Utf8Str(pub Box<[u8]>);
 
 impl fmt::Debug for Utf8Str {
@@ -73,7 +73,7 @@ impl Utf8Str {
 }
 
 /// MessagePack Rust owned Value type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// MessagePack `Nil` type
     Nil,
@@ -98,6 +98,12 @@ pub enum Value {
 
     /// MessagePack `Ext` type
     Ext(i8, Box<[u8]>),
+}
+
+impl PartialEq<ValueRef<'_>> for Value {
+    fn eq(&self, oth: &ValueRef) -> bool {
+        &self.as_ref() == oth
+    }
 }
 
 impl From<()> for Value {
@@ -301,6 +307,7 @@ impl Value {
 }
 
 /// MessagePack Utf8 String Reference type
+#[derive(Clone, PartialEq)]
 pub struct Utf8StrRef<'lt>(pub &'lt [u8]);
 
 impl<'a> From<&'a Utf8Str> for Utf8StrRef<'a> {
@@ -340,7 +347,7 @@ impl<'lt> Utf8StrRef<'lt> {
 }
 
 /// MessagePack Rust Value Reference type
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValueRef<'lt> {
     /// MessagePack `Nil` type
     Nil,
@@ -365,6 +372,12 @@ pub enum ValueRef<'lt> {
 
     /// MessagePack `Ext` type
     Ext(i8, &'lt [u8]),
+}
+
+impl PartialEq<Value> for ValueRef<'_> {
+    fn eq(&self, oth: &Value) -> bool {
+        self == &oth.as_ref()
+    }
 }
 
 impl<'a> From<&'a Value> for ValueRef<'a> {
@@ -612,7 +625,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sync_value_encode_decode() {
+    fn test_value_encode_decode() {
         let arr = Value::Arr(vec![
             Value::from(()),
             Value::from(true),
@@ -632,15 +645,18 @@ mod tests {
         futures::executor::block_on(async {
             map.encode_async(&mut data2).await.unwrap();
         });
-        //println!("encoded: {}", String::from_utf8_lossy(&data));
         assert_eq!(data, data2);
 
-        let _dec = ValueRef::from_ref(data.as_slice()).unwrap();
-        let _dec = Value::from_sync(data.as_slice()).unwrap();
-        let _dec = futures::executor::block_on(async {
+        let dec1 = ValueRef::from_ref(data.as_slice()).unwrap();
+        assert_eq!(dec1, map);
+
+        let dec2 = Value::from_sync(data.as_slice()).unwrap();
+        assert_eq!(dec1, dec2);
+
+        let dec3 = futures::executor::block_on(async {
             Value::from_async(data.as_slice()).await
         })
         .unwrap();
-        //println!("decoded: {:?}", dec);
+        assert_eq!(dec2, dec3);
     }
 }
