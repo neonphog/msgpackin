@@ -112,6 +112,22 @@ pub mod types {
 
 use types::*;
 
+#[cfg(feature = "serde")]
+pub mod ser;
+
+#[cfg(feature = "serde")]
+pub use ser::to_async;
+#[cfg(feature = "serde")]
+pub use ser::to_async_config;
+#[cfg(feature = "serde")]
+pub use ser::to_bytes;
+#[cfg(feature = "serde")]
+pub use ser::to_bytes_config;
+#[cfg(feature = "serde")]
+pub use ser::to_sync;
+#[cfg(feature = "serde")]
+pub use ser::to_sync_config;
+
 pub mod value;
 
 pub use value::Value;
