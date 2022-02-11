@@ -8,6 +8,19 @@ use crate::*;
 #[derive(Clone, PartialEq)]
 pub struct Utf8Str(pub Box<[u8]>);
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Utf8Str {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self.as_str() {
+            Ok(s) => serializer.serialize_str(s),
+            Err(_) => serializer.serialize_bytes(&self.0),
+        }
+    }
+}
+
 impl fmt::Debug for Utf8Str {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
@@ -98,6 +111,16 @@ pub enum Value {
 
     /// MessagePack `Ext` type
     Ext(i8, Box<[u8]>),
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&ValueRef::from(self), serializer)
+    }
 }
 
 impl PartialEq<ValueRef<'_>> for Value {
@@ -310,6 +333,19 @@ impl Value {
 #[derive(Clone, PartialEq)]
 pub struct Utf8StrRef<'lt>(pub &'lt [u8]);
 
+#[cfg(feature = "serde")]
+impl<'lt> serde::Serialize for Utf8StrRef<'lt> {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self.as_str() {
+            Ok(s) => serializer.serialize_str(s),
+            Err(_) => serializer.serialize_bytes(&self.0),
+        }
+    }
+}
+
 impl<'a> From<&'a Utf8Str> for Utf8StrRef<'a> {
     fn from(s: &'a Utf8Str) -> Self {
         Utf8StrRef(&s.0)
@@ -372,6 +408,45 @@ pub enum ValueRef<'lt> {
 
     /// MessagePack `Ext` type
     Ext(i8, &'lt [u8]),
+}
+
+#[cfg(feature = "serde")]
+impl<'lt> serde::Serialize for ValueRef<'lt> {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ValueRef::Nil => serializer.serialize_unit(),
+            ValueRef::Bool(b) => serializer.serialize_bool(*b),
+            ValueRef::Num(Num::Unsigned(u)) => serializer.serialize_u64(*u),
+            ValueRef::Num(Num::Signed(i)) => serializer.serialize_i64(*i),
+            ValueRef::Num(Num::F32(f)) => serializer.serialize_f32(*f),
+            ValueRef::Num(Num::F64(f)) => serializer.serialize_f64(*f),
+            ValueRef::Bin(data) => serializer.serialize_bytes(data),
+            ValueRef::Str(s) => serde::Serialize::serialize(s, serializer),
+            ValueRef::Arr(arr) => {
+                use serde::ser::SerializeSeq;
+                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
+                for item in arr.iter() {
+                    seq.serialize_element(item)?;
+                }
+                seq.end()
+            }
+            ValueRef::Map(map) => {
+                use serde::ser::SerializeMap;
+                let mut ser = serializer.serialize_map(Some(map.len()))?;
+                for (k, v) in map.iter() {
+                    ser.serialize_entry(k, v)?;
+                }
+                ser.end()
+            }
+            ValueRef::Ext(t, data) => serializer.serialize_newtype_struct(
+                "_ExtStruct",
+                &(t, ValueRef::Bin(data)),
+            ),
+        }
+    }
 }
 
 impl PartialEq<Value> for ValueRef<'_> {
@@ -623,6 +698,17 @@ impl<'lt> ValueRef<'lt> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_serde() {
+        let arr = Value::Arr(vec![
+            Value::from(true),
+            Value::Ext(-42, b"hello".to_vec().into()),
+            Value::from(false),
+        ]);
+        let _res = crate::to_bytes(&arr).unwrap();
+    }
 
     #[test]
     fn test_value_encode_decode() {

@@ -116,17 +116,19 @@ use types::*;
 pub mod ser;
 
 #[cfg(feature = "serde")]
-pub use ser::to_async;
+pub use ser::{
+    to_async, to_async_config, to_bytes, to_bytes_config, to_sync,
+    to_sync_config,
+};
+
 #[cfg(feature = "serde")]
-pub use ser::to_async_config;
+pub mod de;
+
 #[cfg(feature = "serde")]
-pub use ser::to_bytes;
-#[cfg(feature = "serde")]
-pub use ser::to_bytes_config;
-#[cfg(feature = "serde")]
-pub use ser::to_sync;
-#[cfg(feature = "serde")]
-pub use ser::to_sync_config;
+pub use de::{
+    from_async, from_async_config, from_ref, from_ref_config, from_sync,
+    from_sync_config,
+};
 
 pub mod value;
 

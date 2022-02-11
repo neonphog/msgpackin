@@ -58,6 +58,16 @@ impl serde::ser::Error for Error {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::de::Error for Error {
+    fn custom<T>(msg: T) -> Self
+    where
+        T: fmt::Display,
+    {
+        Error::EOther(msg.to_string())
+    }
+}
+
 impl From<&str> for Error {
     fn from(s: &str) -> Self {
         Error::EOther(s.to_string())

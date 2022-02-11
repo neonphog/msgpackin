@@ -229,12 +229,51 @@ impl<'a, 'b, 'lt> ser::Serializer for &'b mut SerializerSyncRef<'a, 'lt> {
 
     fn serialize_newtype_struct<T>(
         self,
-        _name: &'static str,
+        name: &'static str,
         value: &T,
     ) -> Result<()>
     where
         T: ?Sized + Serialize,
     {
+        if name == "_ExtStruct" {
+            let mut buf = Vec::new();
+            {
+                let SerializerSyncRef {
+                    config,
+                    con: _,
+                    enc,
+                } = self;
+                let mut tmp_con: DynConsumerSync<'_> = (&mut buf).into();
+                let mut r = SerializerSyncRef {
+                    config,
+                    con: &mut tmp_con,
+                    enc,
+                };
+                value.serialize(&mut r)?;
+            }
+            match ValueRef::from_ref(buf.as_slice())? {
+                ValueRef::Arr(mut arr) => {
+                    if arr.len() == 2 {
+                        match (arr.remove(0), arr.remove(0)) {
+                            (ValueRef::Num(t), ValueRef::Bin(data)) => {
+                                if t.fits::<i8>() {
+                                    let t: i8 = t.to();
+                                    self.con.write(
+                                        &self
+                                            .enc
+                                            .enc_ext_len(data.len() as u32, t),
+                                    )?;
+                                    return self.con.write(data);
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        // fallback to just encoding
         value.serialize(self)
     }
 
