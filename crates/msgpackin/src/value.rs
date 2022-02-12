@@ -4,6 +4,16 @@ use crate::consumer::*;
 use crate::producer::*;
 use crate::*;
 
+#[cfg(feature = "serde")]
+macro_rules! visit {
+    ($id:ident, $ty:ty, $n:ident, $b:block) => {
+        fn $id<E>(self, $n: $ty) -> result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        $b
+    };
+}
+
 /// MessagePack Utf8 String Reference type
 #[derive(Clone, PartialEq)]
 pub struct Utf8Str(pub Box<[u8]>);
@@ -18,6 +28,38 @@ impl serde::Serialize for Utf8Str {
             Ok(s) => serializer.serialize_str(s),
             Err(_) => serializer.serialize_bytes(&self.0),
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Utf8Str {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Utf8Str;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("str, or bytes")
+            }
+
+            visit!(visit_str, &str, v, {
+                Ok(Utf8Str(v.to_string().into_bytes().into_boxed_slice()))
+            });
+            visit!(visit_string, String, v, {
+                Ok(Utf8Str(v.into_bytes().into_boxed_slice()))
+            });
+            visit!(visit_bytes, &[u8], v, {
+                Ok(Utf8Str(v.to_vec().into_boxed_slice()))
+            });
+            visit!(visit_byte_buf, Vec<u8>, v, {
+                Ok(Utf8Str(v.into_boxed_slice()))
+            });
+        }
+
+        deserializer.deserialize_string(V)
     }
 }
 
@@ -120,6 +162,119 @@ impl serde::Serialize for Value {
         S: serde::Serializer,
     {
         serde::Serialize::serialize(&ValueRef::from(self), serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Value;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("any")
+            }
+
+            visit!(visit_bool, bool, v, { Ok(Value::Bool(v)) });
+            visit!(visit_i8, i8, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_i16, i16, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_i32, i32, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_i64, i64, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u8, u8, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u16, u16, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u32, u32, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u64, u64, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_f32, f32, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_f64, f64, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_str, &str, v, {
+                Ok(Value::Str(Utf8Str(
+                    v.to_string().into_bytes().into_boxed_slice(),
+                )))
+            });
+            visit!(visit_string, String, v, {
+                Ok(Value::Str(Utf8Str(v.into_bytes().into_boxed_slice())))
+            });
+            visit!(visit_bytes, &[u8], v, {
+                Ok(Value::Bin(v.to_vec().into_boxed_slice()))
+            });
+            visit!(visit_byte_buf, Vec<u8>, v, {
+                Ok(Value::Bin(v.into_boxed_slice()))
+            });
+
+            fn visit_none<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Nil)
+            }
+
+            fn visit_some<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(V)
+            }
+
+            fn visit_unit<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Nil)
+            }
+
+            fn visit_newtype_struct<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(V)
+            }
+
+            fn visit_seq<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut arr = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(v) = acc.next_element()? {
+                    arr.push(v);
+                }
+                Ok(Value::Arr(arr))
+            }
+
+            fn visit_map<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut map = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(pair) = acc.next_entry()? {
+                    map.push(pair);
+                }
+                Ok(Value::Map(map))
+            }
+        }
+
+        deserializer.deserialize_any(V)
     }
 }
 
@@ -346,6 +501,30 @@ impl<'lt> serde::Serialize for Utf8StrRef<'lt> {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Utf8StrRef<'de> {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Utf8StrRef<'de>;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("str, or bytes")
+            }
+
+            visit!(visit_borrowed_str, &'de str, v, {
+                Ok(Utf8StrRef(v.as_bytes()))
+            });
+            visit!(visit_borrowed_bytes, &'de [u8], v, { Ok(Utf8StrRef(v)) });
+        }
+
+        deserializer.deserialize_str(V)
+    }
+}
+
 impl<'a> From<&'a Utf8Str> for Utf8StrRef<'a> {
     fn from(s: &'a Utf8Str) -> Self {
         Utf8StrRef(&s.0)
@@ -446,6 +625,111 @@ impl<'lt> serde::Serialize for ValueRef<'lt> {
                 &(t, ValueRef::Bin(data)),
             ),
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ValueRef<'de> {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = ValueRef<'de>;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("any")
+            }
+
+            visit!(visit_bool, bool, v, { Ok(ValueRef::Bool(v)) });
+            visit!(visit_i8, i8, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_i16, i16, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_i32, i32, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_i64, i64, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u8, u8, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u16, u16, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u32, u32, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u64, u64, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_f32, f32, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_f64, f64, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_borrowed_str, &'de str, v, {
+                Ok(ValueRef::Str(Utf8StrRef(v.as_bytes())))
+            });
+            visit!(visit_borrowed_bytes, &'de [u8], v, {
+                Ok(ValueRef::Bin(v))
+            });
+
+            fn visit_none<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(ValueRef::Nil)
+            }
+
+            fn visit_some<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(V)
+            }
+
+            fn visit_unit<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(ValueRef::Nil)
+            }
+
+            fn visit_newtype_struct<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(V)
+            }
+
+            fn visit_seq<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut arr = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(v) = acc.next_element()? {
+                    arr.push(v);
+                }
+                Ok(ValueRef::Arr(arr))
+            }
+
+            fn visit_map<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut map = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(pair) = acc.next_entry()? {
+                    map.push(pair);
+                }
+                Ok(ValueRef::Map(map))
+            }
+        }
+
+        deserializer.deserialize_any(V)
     }
 }
 
