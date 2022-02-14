@@ -236,7 +236,19 @@ impl<'de> serde::Deserialize<'de> for Value {
             where
                 D: serde::de::Deserializer<'de>,
             {
-                deserializer.deserialize_any(V)
+                let dec: Self::Value = deserializer.deserialize_any(V)?;
+                if let Value::Arr(mut arr) = dec {
+                    if arr.len() == 2 {
+                        let t = arr.remove(0);
+                        let data = arr.remove(0);
+                        if let (Value::Num(t), Value::Bin(data)) = (t, data) {
+                            if t.fits::<i8>() {
+                                return Ok(Value::Ext(t.to(), data));
+                            }
+                        }
+                    }
+                }
+                unreachable!()
             }
 
             fn visit_seq<A>(
@@ -531,6 +543,18 @@ impl<'a> From<&'a Utf8Str> for Utf8StrRef<'a> {
     }
 }
 
+impl<'a> From<&'a str> for Utf8StrRef<'a> {
+    fn from(s: &'a str) -> Self {
+        Utf8StrRef(s.as_bytes())
+    }
+}
+
+impl<'a> From<&'a [u8]> for Utf8StrRef<'a> {
+    fn from(s: &'a [u8]) -> Self {
+        Utf8StrRef(s)
+    }
+}
+
 impl fmt::Debug for Utf8StrRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
@@ -621,7 +645,7 @@ impl<'lt> serde::Serialize for ValueRef<'lt> {
                 ser.end()
             }
             ValueRef::Ext(t, data) => serializer.serialize_newtype_struct(
-                "_ExtStruct",
+                EXT_STRUCT_NAME,
                 &(t, ValueRef::Bin(data)),
             ),
         }
@@ -691,7 +715,21 @@ impl<'de> serde::Deserialize<'de> for ValueRef<'de> {
             where
                 D: serde::de::Deserializer<'de>,
             {
-                deserializer.deserialize_any(V)
+                let dec: Self::Value = deserializer.deserialize_any(V)?;
+                if let ValueRef::Arr(mut arr) = dec {
+                    if arr.len() == 2 {
+                        let t = arr.remove(0);
+                        let data = arr.remove(0);
+                        if let (ValueRef::Num(t), ValueRef::Bin(data)) =
+                            (t, data)
+                        {
+                            if t.fits::<i8>() {
+                                return Ok(ValueRef::Ext(t.to(), data));
+                            }
+                        }
+                    }
+                }
+                unreachable!()
             }
 
             fn visit_seq<A>(

@@ -235,7 +235,7 @@ impl<'a, 'b, 'lt> ser::Serializer for &'b mut SerializerSyncRef<'a, 'lt> {
     where
         T: ?Sized + Serialize,
     {
-        if name == "_ExtStruct" {
+        if name == EXT_STRUCT_NAME {
             let mut buf = Vec::new();
             {
                 let SerializerSyncRef {

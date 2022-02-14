@@ -1,6 +1,39 @@
 use crate::*;
 
 #[test]
+fn can_ser_ext() {
+    #[derive(serde::Serialize)]
+    struct _ExtStruct((i8, ValueRef<'static>));
+    let e = _ExtStruct((-42, ValueRef::Bin(b"hello")));
+    let enc = to_bytes(&e).unwrap();
+    let dec = ValueRef::from_ref(enc.as_slice()).unwrap();
+    assert_eq!(Value::Ext(-42, b"hello".to_vec().into_boxed_slice()), dec);
+}
+
+#[test]
+fn can_ser_value() {
+    let enc = to_bytes(&ValueRef::Arr(vec![
+        ValueRef::Ext(-42, b"hello"),
+        ValueRef::Map(vec![(
+            ValueRef::Str("test".into()),
+            ValueRef::Str("val".into()),
+        )]),
+    ]))
+    .unwrap();
+    let dec = ValueRef::from_ref(enc.as_slice()).unwrap();
+    assert_eq!(
+        ValueRef::Arr(vec![
+            ValueRef::Ext(-42, b"hello"),
+            ValueRef::Map(vec![(
+                ValueRef::Str("test".into()),
+                ValueRef::Str("val".into())
+            ),]),
+        ]),
+        dec
+    );
+}
+
+#[test]
 fn can_ser_tuple() {
     let enc = to_bytes(&("hello", 42, <Option<i8>>::None, true)).unwrap();
     let dec = ValueRef::from_ref(enc.as_slice()).unwrap();

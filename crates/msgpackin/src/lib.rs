@@ -33,6 +33,9 @@ compile_error!(
     "You cannot enable feature \"tokio\" without also enabling \"std\""
 );
 
+#[cfg(feature = "serde")]
+const EXT_STRUCT_NAME: &str = "_ExtStruct";
+
 // lib facade
 mod lib {
     pub mod core {

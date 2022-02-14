@@ -162,7 +162,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
             }
             Some(MetaValue::O(Value::Ext(_, _)))
             | Some(MetaValue::R(ValueRef::Ext(_, _))) => {
-                self.deserialize_map(visitor)
+                self.deserialize_newtype_struct(EXT_STRUCT_NAME, visitor)
             }
             None => Err("uninitialized".into()),
         }
@@ -441,12 +441,33 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
 
     fn deserialize_newtype_struct<V>(
         self,
-        _name: &'static str,
+        name: &'static str,
         visitor: V,
     ) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
+        if name == EXT_STRUCT_NAME {
+            match self.0.take() {
+                Some(MetaValue::O(Value::Ext(t, data))) => {
+                    self.0.replace(MetaValue::O(Value::Arr(vec![
+                        Value::Num(t.into()),
+                        Value::Bin(data),
+                    ])));
+                }
+                Some(MetaValue::R(ValueRef::Ext(t, data))) => {
+                    self.0.replace(MetaValue::R(ValueRef::Arr(vec![
+                        ValueRef::Num(t.into()),
+                        ValueRef::Bin(data),
+                    ])));
+                }
+                Some(oth) => {
+                    self.0.replace(oth);
+                }
+                _ => (),
+            }
+        }
+
         visitor.visit_newtype_struct(self)
     }
 
@@ -675,3 +696,6 @@ impl<'de> de::VariantAccess<'de> for Enum<'de> {
         )
     }
 }
+
+#[cfg(test)]
+mod de_tests;
