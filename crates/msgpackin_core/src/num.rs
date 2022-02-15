@@ -159,14 +159,64 @@ macro_rules! num_to {
 
             fn to(&self) -> $t {
                 match &self {
-                    Num::F32(f) => (*f).clamp(<$t>::MIN as f32, <$t>::MAX as f32) as $t,
-                    Num::F64(f) => (*f).clamp(<$t>::MIN as f64, <$t>::MAX as f64) as $t,
-                    Num::Signed(i) => (*i).clamp(<$t>::MIN as i64, <$t>::MAX as i64) as $t,
-                    Num::Unsigned(i) => (*i).clamp(<$t>::MIN as u64, <$t>::MAX as u64) as $t,
+                    Num::F32(f) => (*f) as $t,
+                    Num::F64(f) => (*f) as $t,
+                    Num::Signed(i) => (*i as i128).clamp(
+                        <$t>::MIN as i128,
+                        <$t>::MAX as i128,
+                    ) as $t,
+                    Num::Unsigned(u) => (*u as i128).clamp(
+                        <$t>::MIN as i128,
+                        <$t>::MAX as i128,
+                    ) as $t,
                 }
             }
         }
-    )*}
+    )*};
 }
 
-num_to!(u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64);
+num_to!(u8 u16 u32 u64 usize i8 i16 i32 i64 i128 isize f32 f64);
+
+// have to hand-code this one because it overflows our i128
+impl NumTo<u128> for Num {
+    fn fits(&self) -> bool {
+        match self {
+            Num::F32(f) => *f as u128 as f32 == *f,
+            Num::F64(f) => *f as u128 as f64 == *f,
+            Num::Signed(i) => *i as u128 as i64 == *i,
+            Num::Unsigned(u) => *u as u128 as u64 == *u,
+        }
+    }
+
+    fn to(&self) -> u128 {
+        match &self {
+            Num::F32(f) => (*f) as u128,
+            Num::F64(f) => (*f) as u128,
+            Num::Signed(i) => (*i).clamp(0, i64::MAX) as u128,
+            Num::Unsigned(u) => (*u) as u128,
+        }
+    }
+}
+
+#[cfg(test)]
+mod num_tests {
+    use super::*;
+
+    #[test]
+    fn test_to() {
+        macro_rules! test_to_from {
+            ($tt:ty:$($tf:ty)*) => {$({
+                let _n: $tt = Num::from(<$tf>::MIN).to();
+                let _n: $tt = Num::from(<$tf>::MAX).to();
+            })*};
+        }
+
+        macro_rules! test_to {
+            ($($t:ty)*) => {$(
+                test_to_from!($t: u8 u16 u32 u64 usize i8 i16 i32 i64 isize f32 f64);
+            )*};
+        }
+
+        test_to!(u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64);
+    }
+}

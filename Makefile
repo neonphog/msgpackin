@@ -10,28 +10,29 @@ ENV = RUSTFLAGS='$(RUSTFLAGS)' CARGO_BUILD_JOBS='$(shell nproc || sysctl -n hw.p
 
 all: test
 
-bump:
+bump_core:
 	@if [ "$(ver)x" = "x" ]; then \
-		echo "# USAGE: 'make bump ver=0.0.1-alpha.42'"; \
+		echo "# USAGE: 'make bump_core ver=0.0.1-alpha.42'"; \
 		exit 1; \
 	fi
-	@for toml in $$(find crates -name Cargo.toml); do \
-		echo "# updating version in $${toml} to $(ver)"; \
-		sed -i'' 's/^version = \"[^"]*"$$/version = "$(ver)"/g' $${toml}; \
-		sed -i'' 's/^msgpackin_core = { version = \"[^"]*"/msgpackin_core = { version = "=$(ver)"/g' $${toml}; \
-	done
+	sed -i'' 's/^version = \"[^"]*"$$/version = "$(ver)"/g' crates/msgpackin_core/Cargo.toml; \
+	sed -i'' 's/^msgpackin_core = { version = \"[^"]*"/msgpackin_core = { version = "$(ver)"/g' crates/msgpackin/Cargo.toml; \
 
-publish: tools
+publish_core: test
 	git diff --exit-code
 	cargo publish --manifest-path crates/msgpackin_core/Cargo.toml
-	#echo "-- wait for crates.io... --"; sleep 30
-	#cargo publish --manifest-path crates/msgpackin/Cargo.toml
-	VER="v$$(grep version crates/msgpackin_core/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; git tag -a $$VER -m $$VER
+	VER="msgpackin_core-v$$(grep version crates/msgpackin_core/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; git tag -a $$VER -m $$VER
+	git push --tags
+
+publish: test
+	git diff --exit-code
+	cargo publish --manifest-path crates/msgpackin/Cargo.toml
+	VER="msgpackin-v$$(grep version crates/msgpackin/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; git tag -a $$VER -m $$VER
 	git push --tags
 
 test: tools
 	$(ENV) cargo fmt -- --check
-	$(ENV) cargo clippy
+	$(ENV) cargo clippy --all-features
 	$(ENV) RUST_BACKTRACE=1 ./features-test.bash
 	$(ENV) cargo readme -r crates/msgpackin_core -o README.md
 	$(ENV) cargo readme -r crates/msgpackin -o README.md

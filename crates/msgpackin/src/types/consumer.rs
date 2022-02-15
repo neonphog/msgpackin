@@ -170,8 +170,7 @@ mod write_all {
                 let n = ready!(std::pin::Pin::new(&mut this.writer)
                     .poll_write(cx, this.buf))?;
                 {
-                    let (_, rest) =
-                        mem::replace(&mut this.buf, &[]).split_at(n);
+                    let (_, rest) = std::mem::take(&mut this.buf).split_at(n);
                     this.buf = rest;
                 }
                 if n == 0 {

@@ -4,9 +4,64 @@ use crate::consumer::*;
 use crate::producer::*;
 use crate::*;
 
+#[cfg(feature = "serde")]
+macro_rules! visit {
+    ($id:ident, $ty:ty, $n:ident, $b:block) => {
+        fn $id<E>(self, $n: $ty) -> result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        $b
+    };
+}
+
 /// MessagePack Utf8 String Reference type
 #[derive(Clone, PartialEq)]
 pub struct Utf8Str(pub Box<[u8]>);
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Utf8Str {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self.as_str() {
+            Ok(s) => serializer.serialize_str(s),
+            Err(_) => serializer.serialize_bytes(&self.0),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Utf8Str {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Utf8Str;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("str, or bytes")
+            }
+
+            visit!(visit_str, &str, v, {
+                Ok(Utf8Str(v.to_string().into_bytes().into_boxed_slice()))
+            });
+            visit!(visit_string, String, v, {
+                Ok(Utf8Str(v.into_bytes().into_boxed_slice()))
+            });
+            visit!(visit_bytes, &[u8], v, {
+                Ok(Utf8Str(v.to_vec().into_boxed_slice()))
+            });
+            visit!(visit_byte_buf, Vec<u8>, v, {
+                Ok(Utf8Str(v.into_boxed_slice()))
+            });
+        }
+
+        deserializer.deserialize_string(V)
+    }
+}
 
 impl fmt::Debug for Utf8Str {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -23,6 +78,12 @@ impl fmt::Display for Utf8Str {
             Ok(s) => s.fmt(f),
             Err(_) => write!(f, "EInvalidUtf8({:?})", &self.0),
         }
+    }
+}
+
+impl<'a> From<&Utf8StrRef<'a>> for Utf8Str {
+    fn from(s: &Utf8StrRef<'a>) -> Self {
+        Self(s.0.to_vec().into_boxed_slice())
     }
 }
 
@@ -100,9 +161,163 @@ pub enum Value {
     Ext(i8, Box<[u8]>),
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&ValueRef::from(self), serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Value;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("any")
+            }
+
+            visit!(visit_bool, bool, v, { Ok(Value::Bool(v)) });
+            visit!(visit_i8, i8, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_i16, i16, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_i32, i32, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_i64, i64, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u8, u8, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u16, u16, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u32, u32, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_u64, u64, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_f32, f32, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_f64, f64, v, { Ok(Value::Num(v.into())) });
+            visit!(visit_str, &str, v, {
+                Ok(Value::Str(Utf8Str(
+                    v.to_string().into_bytes().into_boxed_slice(),
+                )))
+            });
+            visit!(visit_string, String, v, {
+                Ok(Value::Str(Utf8Str(v.into_bytes().into_boxed_slice())))
+            });
+            visit!(visit_bytes, &[u8], v, {
+                Ok(Value::Bin(v.to_vec().into_boxed_slice()))
+            });
+            visit!(visit_byte_buf, Vec<u8>, v, {
+                Ok(Value::Bin(v.into_boxed_slice()))
+            });
+
+            fn visit_none<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Nil)
+            }
+
+            fn visit_some<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(V)
+            }
+
+            fn visit_unit<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Value::Nil)
+            }
+
+            fn visit_newtype_struct<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                let dec: Self::Value = deserializer.deserialize_any(V)?;
+                if let Value::Arr(mut arr) = dec {
+                    if arr.len() == 2 {
+                        let t = arr.remove(0);
+                        let data = arr.remove(0);
+                        if let (Value::Num(t), Value::Bin(data)) = (t, data) {
+                            if t.fits::<i8>() {
+                                return Ok(Value::Ext(t.to(), data));
+                            }
+                        }
+                    }
+                }
+                unreachable!()
+            }
+
+            fn visit_seq<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut arr = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(v) = acc.next_element()? {
+                    arr.push(v);
+                }
+                Ok(Value::Arr(arr))
+            }
+
+            fn visit_map<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut map = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(pair) = acc.next_entry()? {
+                    map.push(pair);
+                }
+                Ok(Value::Map(map))
+            }
+        }
+
+        deserializer.deserialize_any(V)
+    }
+}
+
 impl PartialEq<ValueRef<'_>> for Value {
     fn eq(&self, oth: &ValueRef) -> bool {
         &self.as_ref() == oth
+    }
+}
+
+impl<'a> From<&ValueRef<'a>> for Value {
+    fn from(r: &ValueRef<'a>) -> Self {
+        match r {
+            ValueRef::Nil => Value::Nil,
+            ValueRef::Bool(b) => Value::Bool(*b),
+            ValueRef::Num(n) => Value::Num(*n),
+            ValueRef::Bin(data) => Value::Bin(data.to_vec().into_boxed_slice()),
+            ValueRef::Str(data) => Value::Str(data.into()),
+            ValueRef::Ext(t, data) => {
+                Value::Ext(*t, data.to_vec().into_boxed_slice())
+            }
+            ValueRef::Arr(a) => Value::Arr(a.iter().map(Into::into).collect()),
+            ValueRef::Map(m) => Value::Map(
+                m.iter().map(|(k, v)| (k.into(), v.into())).collect(),
+            ),
+        }
     }
 }
 
@@ -212,48 +427,51 @@ impl Value {
         self.into()
     }
 
-    /// Encode this value as message pack data to the given consumer.
-    /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync<'con, C>(&self, c: C) -> Result<()>
-    where
-        C: Into<DynConsumerSync<'con>>,
-    {
-        self.encode_sync_config(c, &Config::default())
+    /// Encode this value as a `Vec<u8>`
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.to_sync(&mut out)?;
+        Ok(out)
     }
 
     /// Encode this value as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync_config<'con, C>(
+    pub fn to_sync<'con, C>(&self, c: C) -> Result<()>
+    where
+        C: Into<DynConsumerSync<'con>>,
+    {
+        self.to_sync_config(c, &Config::default())
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub fn to_sync_config<'con, C>(&self, c: C, config: &Config) -> Result<()>
+    where
+        C: Into<DynConsumerSync<'con>>,
+    {
+        ValueRef::from(self).to_sync_config(c, config)
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub async fn to_async<'con, C>(&self, c: C) -> Result<()>
+    where
+        C: Into<DynConsumerAsync<'con>>,
+    {
+        self.to_async_config(c, &Config::default()).await
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub async fn to_async_config<'con, C>(
         &self,
         c: C,
         config: &Config,
     ) -> Result<()>
     where
-        C: Into<DynConsumerSync<'con>>,
-    {
-        ValueRef::from(self).encode_sync_config(c, config)
-    }
-
-    /// Encode this value as message pack data to the given consumer.
-    /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async<'con, C>(&self, c: C) -> Result<()>
-    where
         C: Into<DynConsumerAsync<'con>>,
     {
-        self.encode_async_config(c, &Config::default()).await
-    }
-
-    /// Encode this value as message pack data to the given consumer.
-    /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async_config<'con, C>(
-        &self,
-        c: C,
-        config: &Config,
-    ) -> Result<()>
-    where
-        C: Into<DynConsumerAsync<'con>>,
-    {
-        ValueRef::from(self).encode_async_config(c, config).await
+        ValueRef::from(self).to_async_config(c, config).await
     }
 
     /// Decode a Value from something that can be converted
@@ -310,9 +528,58 @@ impl Value {
 #[derive(Clone, PartialEq)]
 pub struct Utf8StrRef<'lt>(pub &'lt [u8]);
 
+#[cfg(feature = "serde")]
+impl<'lt> serde::Serialize for Utf8StrRef<'lt> {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self.as_str() {
+            Ok(s) => serializer.serialize_str(s),
+            Err(_) => serializer.serialize_bytes(self.0),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Utf8StrRef<'de> {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Utf8StrRef<'de>;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("str, or bytes")
+            }
+
+            visit!(visit_borrowed_str, &'de str, v, {
+                Ok(Utf8StrRef(v.as_bytes()))
+            });
+            visit!(visit_borrowed_bytes, &'de [u8], v, { Ok(Utf8StrRef(v)) });
+        }
+
+        deserializer.deserialize_str(V)
+    }
+}
+
 impl<'a> From<&'a Utf8Str> for Utf8StrRef<'a> {
     fn from(s: &'a Utf8Str) -> Self {
         Utf8StrRef(&s.0)
+    }
+}
+
+impl<'a> From<&'a str> for Utf8StrRef<'a> {
+    fn from(s: &'a str) -> Self {
+        Utf8StrRef(s.as_bytes())
+    }
+}
+
+impl<'a> From<&'a [u8]> for Utf8StrRef<'a> {
+    fn from(s: &'a [u8]) -> Self {
+        Utf8StrRef(s)
     }
 }
 
@@ -372,6 +639,164 @@ pub enum ValueRef<'lt> {
 
     /// MessagePack `Ext` type
     Ext(i8, &'lt [u8]),
+}
+
+#[cfg(feature = "serde")]
+impl<'lt> serde::Serialize for ValueRef<'lt> {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ValueRef::Nil => serializer.serialize_unit(),
+            ValueRef::Bool(b) => serializer.serialize_bool(*b),
+            ValueRef::Num(Num::Unsigned(u)) => serializer.serialize_u64(*u),
+            ValueRef::Num(Num::Signed(i)) => serializer.serialize_i64(*i),
+            ValueRef::Num(Num::F32(f)) => serializer.serialize_f32(*f),
+            ValueRef::Num(Num::F64(f)) => serializer.serialize_f64(*f),
+            ValueRef::Bin(data) => serializer.serialize_bytes(data),
+            ValueRef::Str(s) => serde::Serialize::serialize(s, serializer),
+            ValueRef::Arr(arr) => {
+                use serde::ser::SerializeSeq;
+                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
+                for item in arr.iter() {
+                    seq.serialize_element(item)?;
+                }
+                seq.end()
+            }
+            ValueRef::Map(map) => {
+                use serde::ser::SerializeMap;
+                let mut ser = serializer.serialize_map(Some(map.len()))?;
+                for (k, v) in map.iter() {
+                    ser.serialize_entry(k, v)?;
+                }
+                ser.end()
+            }
+            ValueRef::Ext(t, data) => serializer.serialize_newtype_struct(
+                EXT_STRUCT_NAME,
+                &(t, ValueRef::Bin(data)),
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ValueRef<'de> {
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = ValueRef<'de>;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("any")
+            }
+
+            visit!(visit_bool, bool, v, { Ok(ValueRef::Bool(v)) });
+            visit!(visit_i8, i8, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_i16, i16, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_i32, i32, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_i64, i64, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u8, u8, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u16, u16, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u32, u32, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_u64, u64, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_f32, f32, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_f64, f64, v, { Ok(ValueRef::Num(v.into())) });
+            visit!(visit_borrowed_str, &'de str, v, {
+                Ok(ValueRef::Str(Utf8StrRef(v.as_bytes())))
+            });
+            visit!(visit_borrowed_bytes, &'de [u8], v, {
+                Ok(ValueRef::Bin(v))
+            });
+
+            fn visit_none<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(ValueRef::Nil)
+            }
+
+            fn visit_some<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(V)
+            }
+
+            fn visit_unit<E>(self) -> result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(ValueRef::Nil)
+            }
+
+            fn visit_newtype_struct<D>(
+                self,
+                deserializer: D,
+            ) -> result::Result<Self::Value, D::Error>
+            where
+                D: serde::de::Deserializer<'de>,
+            {
+                let dec: Self::Value = deserializer.deserialize_any(V)?;
+                if let ValueRef::Arr(mut arr) = dec {
+                    if arr.len() == 2 {
+                        let t = arr.remove(0);
+                        let data = arr.remove(0);
+                        if let (ValueRef::Num(t), ValueRef::Bin(data)) =
+                            (t, data)
+                        {
+                            if t.fits::<i8>() {
+                                return Ok(ValueRef::Ext(t.to(), data));
+                            }
+                        }
+                    }
+                }
+                unreachable!()
+            }
+
+            fn visit_seq<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut arr = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(v) = acc.next_element()? {
+                    arr.push(v);
+                }
+                Ok(ValueRef::Arr(arr))
+            }
+
+            fn visit_map<A>(
+                self,
+                mut acc: A,
+            ) -> result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut map = match acc.size_hint() {
+                    Some(l) => Vec::with_capacity(l),
+                    None => Vec::new(),
+                };
+                while let Some(pair) = acc.next_entry()? {
+                    map.push(pair);
+                }
+                Ok(ValueRef::Map(map))
+            }
+        }
+
+        deserializer.deserialize_any(V)
+    }
 }
 
 impl PartialEq<Value> for ValueRef<'_> {
@@ -547,22 +972,30 @@ impl<'dec, 'buf> VRDecode<'dec, 'buf> {
 }
 
 impl<'lt> ValueRef<'lt> {
-    /// Encode this value as message pack data to the given consumer.
+    /// Convert this ValueRef into an owned Value
+    pub fn to_owned(&self) -> Value {
+        self.into()
+    }
+
+    /// Encode this value ref as a `Vec<u8>`
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.to_sync(&mut out)?;
+        Ok(out)
+    }
+
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync<'con, C>(&self, c: C) -> Result<()>
+    pub fn to_sync<'con, C>(&self, c: C) -> Result<()>
     where
         C: Into<DynConsumerSync<'con>>,
     {
-        self.encode_sync_config(c, &Config::default())
+        self.to_sync_config(c, &Config::default())
     }
 
-    /// Encode this value as message pack data to the given consumer.
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync_config<'con, C>(
-        &self,
-        c: C,
-        config: &Config,
-    ) -> Result<()>
+    pub fn to_sync_config<'con, C>(&self, c: C, config: &Config) -> Result<()>
     where
         C: Into<DynConsumerSync<'con>>,
     {
@@ -571,18 +1004,18 @@ impl<'lt> ValueRef<'lt> {
         priv_encode_sync(self, &mut enc, &mut c, config)
     }
 
-    /// Encode this value as message pack data to the given consumer.
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async<'con, C>(&self, c: C) -> Result<()>
+    pub async fn to_async<'con, C>(&self, c: C) -> Result<()>
     where
         C: Into<DynConsumerAsync<'con>>,
     {
-        self.encode_async_config(c, &Config::default()).await
+        self.to_async_config(c, &Config::default()).await
     }
 
-    /// Encode this value as message pack data to the given consumer.
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async_config<'con, C>(
+    pub async fn to_async_config<'con, C>(
         &self,
         c: C,
         config: &Config,
@@ -624,6 +1057,17 @@ impl<'lt> ValueRef<'lt> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_serde() {
+        let arr = Value::Arr(vec![
+            Value::from(true),
+            Value::Ext(-42, b"hello".to_vec().into()),
+            Value::from(false),
+        ]);
+        let _res = crate::to_bytes(&arr).unwrap();
+    }
+
     #[test]
     fn test_value_encode_decode() {
         let arr = Value::Arr(vec![
@@ -640,10 +1084,10 @@ mod tests {
             (Value::from("nother"), Value::from("testing")),
         ]);
         let mut data = Vec::new();
-        map.encode_sync(&mut data).unwrap();
+        map.to_sync(&mut data).unwrap();
         let mut data2 = Vec::new();
         futures::executor::block_on(async {
-            map.encode_async(&mut data2).await.unwrap();
+            map.to_async(&mut data2).await.unwrap();
         });
         assert_eq!(data, data2);
 
