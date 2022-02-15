@@ -1,6 +1,6 @@
 [package]
 name = "msgpackin"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["neonphog <neonphog@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
@@ -10,6 +10,10 @@ description = "Msgpackin pure Rust MessagePack encoding / decoding library"
 keywords = ["msgpack", "MessagePack", "no_std"]
 categories = ["encoding"]
 edition = "2021"
+
+[package.metadata.docs.rs]
+# build docs.rs page with all features enabled so we can see the APIs
+all-features = true
 
 [dependencies]
 msgpackin_core = { version = "0.0.3", path = "../msgpackin_core" }
