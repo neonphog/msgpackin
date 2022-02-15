@@ -1,10 +1,10 @@
 [package]
 name = "msgpackin"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["neonphog <neonphog@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-documentation = "https://docs.rs/msgpackin_core"
+documentation = "https://docs.rs/msgpackin"
 repository = "https://github.com/neonphog/msgpackin"
 description = "Msgpackin pure Rust MessagePack encoding / decoding library"
 keywords = ["msgpack", "MessagePack", "no_std"]
