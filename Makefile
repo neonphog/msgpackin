@@ -31,7 +31,7 @@ publish: tools
 
 test: tools
 	$(ENV) cargo fmt -- --check
-	$(ENV) cargo clippy
+	$(ENV) cargo clippy --all-features
 	$(ENV) RUST_BACKTRACE=1 ./features-test.bash
 	$(ENV) cargo readme -r crates/msgpackin_core -o README.md
 	$(ENV) cargo readme -r crates/msgpackin -o README.md

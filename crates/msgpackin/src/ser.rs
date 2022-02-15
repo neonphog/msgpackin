@@ -89,24 +89,11 @@ pub struct SerializerSyncRef<'a, 'lt> {
     pub enc: &'a mut msgpackin_core::encode::Encoder,
 }
 
-/// trait for a sync serializer
-pub trait AsSerializerSync<'lt> {
-    /// get a reference to this sync serializer
-    fn as_ref(&mut self) -> SerializerSyncRef<'_, 'lt>;
-}
-
 /// Msgpackin serde SerializerSync
 pub struct SerializerSync<'lt> {
     config: Config,
     con: DynConsumerSync<'lt>,
     enc: msgpackin_core::encode::Encoder,
-}
-
-impl<'lt> AsSerializerSync<'lt> for SerializerSync<'lt> {
-    fn as_ref(&mut self) -> SerializerSyncRef<'_, 'lt> {
-        let SerializerSync { config, con, enc } = self;
-        SerializerSyncRef { config, con, enc }
-    }
 }
 
 impl<'lt> SerializerSync<'lt> {
@@ -120,6 +107,12 @@ impl<'lt> SerializerSync<'lt> {
             con: consumer.into(),
             enc: msgpackin_core::encode::Encoder::new(),
         }
+    }
+
+    /// Get the mutable reference that can be used to serialize
+    pub fn as_ref(&mut self) -> SerializerSyncRef<'_, 'lt> {
+        let SerializerSync { config, con, enc } = self;
+        SerializerSyncRef { config, con, enc }
     }
 }
 
@@ -251,26 +244,21 @@ impl<'a, 'b, 'lt> ser::Serializer for &'b mut SerializerSyncRef<'a, 'lt> {
                 };
                 value.serialize(&mut r)?;
             }
-            match ValueRef::from_ref(buf.as_slice())? {
-                ValueRef::Arr(mut arr) => {
-                    if arr.len() == 2 {
-                        match (arr.remove(0), arr.remove(0)) {
-                            (ValueRef::Num(t), ValueRef::Bin(data)) => {
-                                if t.fits::<i8>() {
-                                    let t: i8 = t.to();
-                                    self.con.write(
-                                        &self
-                                            .enc
-                                            .enc_ext_len(data.len() as u32, t),
-                                    )?;
-                                    return self.con.write(data);
-                                }
-                            }
-                            _ => (),
+            if let ValueRef::Arr(mut arr) = ValueRef::from_ref(buf.as_slice())?
+            {
+                if arr.len() == 2 {
+                    if let (ValueRef::Num(t), ValueRef::Bin(data)) =
+                        (arr.remove(0), arr.remove(0))
+                    {
+                        if t.fits::<i8>() {
+                            let t: i8 = t.to();
+                            self.con.write(
+                                &self.enc.enc_ext_len(data.len() as u32, t),
+                            )?;
+                            return self.con.write(data);
                         }
                     }
                 }
-                _ => (),
             }
         }
         // fallback to just encoding

@@ -27,6 +27,13 @@ impl<'buf> From<&'buf [u8]> for DynProducerComplete<'buf> {
     }
 }
 
+impl<'buf> From<&'buf Vec<u8>> for DynProducerComplete<'buf> {
+    #[inline(always)]
+    fn from(buf: &'buf Vec<u8>) -> Self {
+        buf.as_slice().into()
+    }
+}
+
 /// Trait representing a data provider that provides data in synchronous chunks
 pub trait AsProducerSync {
     /// Read the next chunk of data
@@ -54,6 +61,14 @@ impl<'lt> From<&'lt [u8]> for DynProducerSync<'lt> {
             }
         }
         Box::new(X(buf, true))
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<'lt> From<&'lt Vec<u8>> for DynProducerSync<'lt> {
+    #[inline(always)]
+    fn from(buf: &'lt Vec<u8>) -> Self {
+        buf.as_slice().into()
     }
 }
 
@@ -110,6 +125,14 @@ impl<'lt> From<&'lt [u8]> for DynProducerAsync<'lt> {
             }
         }
         Box::new(X(buf, true))
+    }
+}
+
+#[cfg(all(not(feature = "futures-io"), not(feature = "tokio")))]
+impl<'lt> From<&'lt Vec<u8>> for DynProducerAsync<'lt> {
+    #[inline(always)]
+    fn from(buf: &'lt Vec<u8>) -> Self {
+        buf.as_slice().into()
     }
 }
 

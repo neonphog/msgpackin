@@ -75,6 +75,38 @@ enum MetaValue<'lt> {
     R(ValueRef<'lt>),
 }
 
+impl<'lt> fmt::Debug for MetaValue<'lt> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MetaValue::O(Value::Nil) | MetaValue::R(ValueRef::Nil) => {
+                f.write_str("nil")
+            }
+            MetaValue::O(Value::Bool(b)) | MetaValue::R(ValueRef::Bool(b)) => {
+                write!(f, "bool({})", b)
+            }
+            MetaValue::O(Value::Num(n)) | MetaValue::R(ValueRef::Num(n)) => {
+                write!(f, "num({})", n)
+            }
+            MetaValue::O(Value::Bin(_)) | MetaValue::R(ValueRef::Bin(_)) => {
+                f.write_str("bin")
+            }
+            MetaValue::O(Value::Str(_)) | MetaValue::R(ValueRef::Str(_)) => {
+                f.write_str("str")
+            }
+            MetaValue::O(Value::Ext(t, _))
+            | MetaValue::R(ValueRef::Ext(t, _)) => {
+                write!(f, "ext({})", t)
+            }
+            MetaValue::O(Value::Arr(_)) | MetaValue::R(ValueRef::Arr(_)) => {
+                f.write_str("seq")
+            }
+            MetaValue::O(Value::Map(_)) | MetaValue::R(ValueRef::Map(_)) => {
+                f.write_str("map")
+            }
+        }
+    }
+}
+
 /// Msgpackin serde DeserializerSync
 pub struct DeserializerSync<'de>(Option<MetaValue<'de>>);
 
@@ -164,7 +196,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
             | Some(MetaValue::R(ValueRef::Ext(_, _))) => {
                 self.deserialize_newtype_struct(EXT_STRUCT_NAME, visitor)
             }
-            None => Err("uninitialized".into()),
+            None => Err(Error::EDecode {
+                expected: "any".into(),
+                got: "no data".into(),
+            }),
         }
     }
 
@@ -172,152 +207,194 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Bool(b)))
-        | Some(MetaValue::R(ValueRef::Bool(b))) = self.0.take()
-        {
-            return visitor.visit_bool(b);
+        match self.0.take() {
+            Some(MetaValue::O(Value::Bool(b)))
+            | Some(MetaValue::R(ValueRef::Bool(b))) => visitor.visit_bool(b),
+            oth => Err(Error::EDecode {
+                expected: "bool".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected bool".into())
     }
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<i8>() {
-                return visitor.visit_i8(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<i8>() =>
+            {
+                visitor.visit_i8(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "i8".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected i8".into())
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<i16>() {
-                return visitor.visit_i16(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<i16>() =>
+            {
+                visitor.visit_i16(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "i16".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected i16".into())
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<i32>() {
-                return visitor.visit_i32(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<i32>() =>
+            {
+                visitor.visit_i32(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "i32".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected i32".into())
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<i64>() {
-                return visitor.visit_i64(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<i64>() =>
+            {
+                visitor.visit_i64(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "i64".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected i64".into())
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<u8>() {
-                return visitor.visit_u8(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<u8>() =>
+            {
+                visitor.visit_u8(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "u8".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected u8".into())
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<u16>() {
-                return visitor.visit_u16(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<u16>() =>
+            {
+                visitor.visit_u16(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "u16".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected u16".into())
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<u32>() {
-                return visitor.visit_u32(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<u32>() =>
+            {
+                visitor.visit_u32(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "u32".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected u32".into())
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<u64>() {
-                return visitor.visit_u64(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<u64>() =>
+            {
+                visitor.visit_u64(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "u64".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected u64".into())
     }
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<f32>() {
-                return visitor.visit_f32(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<f32>() =>
+            {
+                visitor.visit_f32(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "f32".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected f32".into())
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Num(n)))
-        | Some(MetaValue::R(ValueRef::Num(n))) = self.0.take()
-        {
-            if n.fits::<f64>() {
-                return visitor.visit_f64(n.to());
+        match self.0.take() {
+            Some(MetaValue::O(Value::Num(n)))
+            | Some(MetaValue::R(ValueRef::Num(n)))
+                if n.fits::<f64>() =>
+            {
+                visitor.visit_f64(n.to())
             }
+            oth => Err(Error::EDecode {
+                expected: "f64".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected f64".into())
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
@@ -325,31 +402,34 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
         V: de::Visitor<'de>,
     {
         match (|this: Self| {
-            let s = this.0.take();
-            let s = match &s {
+            let o = this.0.take();
+            let s = match &o {
                 Some(MetaValue::O(Value::Str(s))) => s.as_str(),
                 Some(MetaValue::R(ValueRef::Str(s))) => s.as_str(),
-                _ => return None,
+                _ => return Err(o),
             };
             let s = match s {
                 Ok(s) => s,
-                Err(_) => return None,
+                Err(_) => return Err(o),
             };
             let mut iter = s.chars();
             // get the first character
             let c = match iter.next() {
                 Some(c) => c,
-                None => return None,
+                None => return Err(o),
             };
             // make sure there are no more
             match iter.next() {
-                None => Some(c),
-                Some(_) => None,
+                None => Ok(c),
+                Some(_) => Err(o),
             }
         })(self)
         {
-            Some(c) => visitor.visit_char(c),
-            None => Err("expected char".into()),
+            Ok(c) => visitor.visit_char(c),
+            Err(o) => Err(Error::EDecode {
+                expected: "char".into(),
+                got: format!("{:?}", o),
+            }),
         }
     }
 
@@ -362,17 +442,19 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
             Some(MetaValue::O(Value::Str(Utf8Str(data)))) => {
                 let data = Vec::from(data);
                 match String::from_utf8(data) {
-                    Ok(s) => return visitor.visit_string(s),
-                    Err(e) => return visitor.visit_byte_buf(e.into_bytes()),
+                    Ok(s) => visitor.visit_string(s),
+                    Err(e) => visitor.visit_byte_buf(e.into_bytes()),
                 }
             }
             Some(MetaValue::R(ValueRef::Str(s))) => match s.as_str() {
-                Ok(s) => return visitor.visit_borrowed_str(s),
-                Err(_) => return visitor.visit_borrowed_bytes(s.as_bytes()),
+                Ok(s) => visitor.visit_borrowed_str(s),
+                Err(_) => visitor.visit_borrowed_bytes(s.as_bytes()),
             },
-            _ => (),
+            oth => Err(Error::EDecode {
+                expected: "str".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected str".into())
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
@@ -388,14 +470,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
     {
         match self.0.take() {
             Some(MetaValue::O(Value::Bin(data))) => {
-                return visitor.visit_byte_buf(Vec::from(data));
+                visitor.visit_byte_buf(Vec::from(data))
             }
             Some(MetaValue::R(ValueRef::Bin(data))) => {
-                return visitor.visit_borrowed_bytes(data);
+                visitor.visit_borrowed_bytes(data)
             }
-            _ => (),
+            oth => Err(Error::EDecode {
+                expected: "bin".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected bytes".into())
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
@@ -420,12 +504,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
     where
         V: de::Visitor<'de>,
     {
-        if let Some(MetaValue::O(Value::Nil))
-        | Some(MetaValue::R(ValueRef::Nil)) = self.0.take()
-        {
-            return visitor.visit_unit();
-        };
-        Err("expected unit".into())
+        match self.0.take() {
+            Some(MetaValue::O(Value::Nil))
+            | Some(MetaValue::R(ValueRef::Nil)) => visitor.visit_unit(),
+            oth => Err(Error::EDecode {
+                expected: "unit".into(),
+                got: format!("{:?}", oth),
+            }),
+        }
     }
 
     fn deserialize_unit_struct<V>(
@@ -477,12 +563,15 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
     {
         match self.0.take() {
             Some(MetaValue::O(Value::Arr(arr))) => {
-                visitor.visit_seq(Seq(arr.into_iter().map(|v| MetaValue::O(v))))
+                visitor.visit_seq(Seq(arr.into_iter().map(MetaValue::O)))
             }
             Some(MetaValue::R(ValueRef::Arr(arr))) => {
-                visitor.visit_seq(Seq(arr.into_iter().map(|v| MetaValue::R(v))))
+                visitor.visit_seq(Seq(arr.into_iter().map(MetaValue::R)))
             }
-            _ => Err("expected seq".into()),
+            oth => Err(Error::EDecode {
+                expected: "seq".into(),
+                got: format!("{:?}", oth),
+            }),
         }
     }
 
@@ -512,17 +601,20 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
         // bit of a hack - convert the map (k, v) tuples into just a flat
         // sequence so we can use the same access iterator
         match self.0.take() {
-            Some(MetaValue::O(Value::Map(map))) => visitor.visit_seq(Seq(map
+            Some(MetaValue::O(Value::Map(map))) => visitor.visit_map(Seq(map
                 .into_iter()
                 .map(|(k, v)| [MetaValue::O(k), MetaValue::O(v)])
                 .flatten())),
             Some(MetaValue::R(ValueRef::Map(map))) => {
-                visitor.visit_seq(Seq(map
+                visitor.visit_map(Seq(map
                     .into_iter()
                     .map(|(k, v)| [MetaValue::R(k), MetaValue::R(v)])
                     .flatten()))
             }
-            _ => Err("expected map".into()),
+            oth => Err(Error::EDecode {
+                expected: "map".into(),
+                got: format!("{:?}", oth),
+            }),
         }
     }
 
@@ -549,37 +641,39 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
     {
         use de::IntoDeserializer;
         match self.0.take() {
-            Some(MetaValue::O(Value::Str(s))) => {
-                if let Ok(s) = s.as_str() {
-                    return visitor.visit_enum(s.into_deserializer());
-                }
+            Some(MetaValue::O(Value::Str(s))) => match s.as_str() {
+                Ok(s) => visitor.visit_enum(s.into_deserializer()),
+                Err(_) => Err(Error::EDecode {
+                    expected: "utf8 str".into(),
+                    got: "non-utf8 bytes".into(),
+                }),
+            },
+            Some(MetaValue::R(ValueRef::Str(s))) => match s.as_str() {
+                Ok(s) => visitor.visit_enum(s.into_deserializer()),
+                Err(_) => Err(Error::EDecode {
+                    expected: "utf8 str".into(),
+                    got: "non-utf8 bytes".into(),
+                }),
+            },
+            Some(MetaValue::O(Value::Map(mut map))) if map.len() == 1 => {
+                let (k, v) = map.remove(0);
+                visitor.visit_enum(Enum(
+                    Some(MetaValue::O(k)),
+                    Some(MetaValue::O(v)),
+                ))
             }
-            Some(MetaValue::R(ValueRef::Str(s))) => {
-                if let Ok(s) = s.as_str() {
-                    return visitor.visit_enum(s.into_deserializer());
-                }
+            Some(MetaValue::R(ValueRef::Map(mut map))) if map.len() == 1 => {
+                let (k, v) = map.remove(0);
+                visitor.visit_enum(Enum(
+                    Some(MetaValue::R(k)),
+                    Some(MetaValue::R(v)),
+                ))
             }
-            Some(MetaValue::O(Value::Map(mut map))) => {
-                if map.len() == 1 {
-                    let (k, v) = map.remove(0);
-                    return visitor.visit_enum(Enum(
-                        Some(MetaValue::O(k)),
-                        Some(MetaValue::O(v)),
-                    ));
-                }
-            }
-            Some(MetaValue::R(ValueRef::Map(mut map))) => {
-                if map.len() == 1 {
-                    let (k, v) = map.remove(0);
-                    return visitor.visit_enum(Enum(
-                        Some(MetaValue::R(k)),
-                        Some(MetaValue::R(v)),
-                    ));
-                }
-            }
-            _ => (),
+            oth => Err(Error::EDecode {
+                expected: "str or map(len == 1)".into(),
+                got: format!("{:?}", oth),
+            }),
         }
-        Err("expected enum".into())
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>

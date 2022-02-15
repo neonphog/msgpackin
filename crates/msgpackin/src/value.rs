@@ -81,6 +81,12 @@ impl fmt::Display for Utf8Str {
     }
 }
 
+impl<'a> From<&Utf8StrRef<'a>> for Utf8Str {
+    fn from(s: &Utf8StrRef<'a>) -> Self {
+        Self(s.0.to_vec().into_boxed_slice())
+    }
+}
+
 impl From<&str> for Utf8Str {
     fn from(s: &str) -> Self {
         Self(s.as_bytes().to_vec().into_boxed_slice())
@@ -296,6 +302,25 @@ impl PartialEq<ValueRef<'_>> for Value {
     }
 }
 
+impl<'a> From<&ValueRef<'a>> for Value {
+    fn from(r: &ValueRef<'a>) -> Self {
+        match r {
+            ValueRef::Nil => Value::Nil,
+            ValueRef::Bool(b) => Value::Bool(*b),
+            ValueRef::Num(n) => Value::Num(*n),
+            ValueRef::Bin(data) => Value::Bin(data.to_vec().into_boxed_slice()),
+            ValueRef::Str(data) => Value::Str(data.into()),
+            ValueRef::Ext(t, data) => {
+                Value::Ext(*t, data.to_vec().into_boxed_slice())
+            }
+            ValueRef::Arr(a) => Value::Arr(a.iter().map(Into::into).collect()),
+            ValueRef::Map(m) => Value::Map(
+                m.iter().map(|(k, v)| (k.into(), v.into())).collect(),
+            ),
+        }
+    }
+}
+
 impl From<()> for Value {
     fn from(_: ()) -> Self {
         Value::Nil
@@ -402,48 +427,51 @@ impl Value {
         self.into()
     }
 
-    /// Encode this value as message pack data to the given consumer.
-    /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync<'con, C>(&self, c: C) -> Result<()>
-    where
-        C: Into<DynConsumerSync<'con>>,
-    {
-        self.encode_sync_config(c, &Config::default())
+    /// Encode this value as a `Vec<u8>`
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.to_sync(&mut out)?;
+        Ok(out)
     }
 
     /// Encode this value as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync_config<'con, C>(
+    pub fn to_sync<'con, C>(&self, c: C) -> Result<()>
+    where
+        C: Into<DynConsumerSync<'con>>,
+    {
+        self.to_sync_config(c, &Config::default())
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub fn to_sync_config<'con, C>(&self, c: C, config: &Config) -> Result<()>
+    where
+        C: Into<DynConsumerSync<'con>>,
+    {
+        ValueRef::from(self).to_sync_config(c, config)
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub async fn to_async<'con, C>(&self, c: C) -> Result<()>
+    where
+        C: Into<DynConsumerAsync<'con>>,
+    {
+        self.to_async_config(c, &Config::default()).await
+    }
+
+    /// Encode this value as message pack data to the given consumer.
+    /// E.g. `&mut Vec<u8>`
+    pub async fn to_async_config<'con, C>(
         &self,
         c: C,
         config: &Config,
     ) -> Result<()>
     where
-        C: Into<DynConsumerSync<'con>>,
-    {
-        ValueRef::from(self).encode_sync_config(c, config)
-    }
-
-    /// Encode this value as message pack data to the given consumer.
-    /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async<'con, C>(&self, c: C) -> Result<()>
-    where
         C: Into<DynConsumerAsync<'con>>,
     {
-        self.encode_async_config(c, &Config::default()).await
-    }
-
-    /// Encode this value as message pack data to the given consumer.
-    /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async_config<'con, C>(
-        &self,
-        c: C,
-        config: &Config,
-    ) -> Result<()>
-    where
-        C: Into<DynConsumerAsync<'con>>,
-    {
-        ValueRef::from(self).encode_async_config(c, config).await
+        ValueRef::from(self).to_async_config(c, config).await
     }
 
     /// Decode a Value from something that can be converted
@@ -508,7 +536,7 @@ impl<'lt> serde::Serialize for Utf8StrRef<'lt> {
     {
         match self.as_str() {
             Ok(s) => serializer.serialize_str(s),
-            Err(_) => serializer.serialize_bytes(&self.0),
+            Err(_) => serializer.serialize_bytes(self.0),
         }
     }
 }
@@ -944,22 +972,30 @@ impl<'dec, 'buf> VRDecode<'dec, 'buf> {
 }
 
 impl<'lt> ValueRef<'lt> {
-    /// Encode this value as message pack data to the given consumer.
+    /// Convert this ValueRef into an owned Value
+    pub fn to_owned(&self) -> Value {
+        self.into()
+    }
+
+    /// Encode this value ref as a `Vec<u8>`
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.to_sync(&mut out)?;
+        Ok(out)
+    }
+
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync<'con, C>(&self, c: C) -> Result<()>
+    pub fn to_sync<'con, C>(&self, c: C) -> Result<()>
     where
         C: Into<DynConsumerSync<'con>>,
     {
-        self.encode_sync_config(c, &Config::default())
+        self.to_sync_config(c, &Config::default())
     }
 
-    /// Encode this value as message pack data to the given consumer.
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub fn encode_sync_config<'con, C>(
-        &self,
-        c: C,
-        config: &Config,
-    ) -> Result<()>
+    pub fn to_sync_config<'con, C>(&self, c: C, config: &Config) -> Result<()>
     where
         C: Into<DynConsumerSync<'con>>,
     {
@@ -968,18 +1004,18 @@ impl<'lt> ValueRef<'lt> {
         priv_encode_sync(self, &mut enc, &mut c, config)
     }
 
-    /// Encode this value as message pack data to the given consumer.
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async<'con, C>(&self, c: C) -> Result<()>
+    pub async fn to_async<'con, C>(&self, c: C) -> Result<()>
     where
         C: Into<DynConsumerAsync<'con>>,
     {
-        self.encode_async_config(c, &Config::default()).await
+        self.to_async_config(c, &Config::default()).await
     }
 
-    /// Encode this value as message pack data to the given consumer.
+    /// Encode this value ref as message pack data to the given consumer.
     /// E.g. `&mut Vec<u8>`
-    pub async fn encode_async_config<'con, C>(
+    pub async fn to_async_config<'con, C>(
         &self,
         c: C,
         config: &Config,
@@ -1048,10 +1084,10 @@ mod tests {
             (Value::from("nother"), Value::from("testing")),
         ]);
         let mut data = Vec::new();
-        map.encode_sync(&mut data).unwrap();
+        map.to_sync(&mut data).unwrap();
         let mut data2 = Vec::new();
         futures::executor::block_on(async {
-            map.encode_async(&mut data2).await.unwrap();
+            map.to_async(&mut data2).await.unwrap();
         });
         assert_eq!(data, data2);
 

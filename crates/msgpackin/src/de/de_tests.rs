@@ -5,7 +5,7 @@ fn can_de_ext() {
     #[derive(Debug, serde::Deserialize, PartialEq)]
     struct _ExtStruct((i8, Value));
     let mut enc = Vec::new();
-    ValueRef::Ext(-42, b"hello").encode_sync(&mut enc).unwrap();
+    ValueRef::Ext(-42, b"hello").to_sync(&mut enc).unwrap();
     let dec: _ExtStruct = from_ref(enc.as_slice()).unwrap();
     assert_eq!(
         _ExtStruct((-42, Value::Bin(b"hello".to_vec().into_boxed_slice()))),
@@ -16,7 +16,7 @@ fn can_de_ext() {
 #[test]
 fn can_de_value_ext() {
     let mut enc = Vec::new();
-    ValueRef::Ext(-42, b"hello").encode_sync(&mut enc).unwrap();
+    ValueRef::Ext(-42, b"hello").to_sync(&mut enc).unwrap();
     let dec: ValueRef = from_ref(enc.as_slice()).unwrap();
     assert_eq!(ValueRef::Ext(-42, b"hello"), dec,);
 }

@@ -21,7 +21,7 @@ cargo test --no-default-features --features std,futures-io
 # std / tokio
 cargo test --no-default-features --features std,tokio
 
-# std / tokio + futures-io (make sure they don't fight...)
+# std / tokio / futures-io
 cargo test --no-default-features --features std,tokio,futures-io
 
 # std / tokio / serde
