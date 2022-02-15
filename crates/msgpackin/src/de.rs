@@ -790,6 +790,3 @@ impl<'de> de::VariantAccess<'de> for Enum<'de> {
         )
     }
 }
-
-#[cfg(test)]
-mod de_tests;

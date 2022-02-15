@@ -575,6 +575,3 @@ impl<'a, 'b, 'lt> ser::SerializeStructVariant
         ser::SerializeMap::end(self)
     }
 }
-
-#[cfg(test)]
-mod ser_tests;
