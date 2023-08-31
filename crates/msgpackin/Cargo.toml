@@ -1,6 +1,6 @@
 [package]
 name = "msgpackin"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["neonphog <neonphog@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
@@ -16,7 +16,7 @@ edition = "2021"
 all-features = true
 
 [dependencies]
-msgpackin_core = { version = "0.0.3", path = "../msgpackin_core" }
+msgpackin_core = { version = "0.0.4", path = "../msgpackin_core" }
 serde = { version = "1.0", optional = true, default-features = false, features = [ "alloc" ] }
 futures-io = { version = "0.3", optional = true, default-features = false, features = [ "std" ] }
 tokio = { version = "1", optional = true, default-features = false }
@@ -29,8 +29,16 @@ serde = { version = "1.0", default-features = false, features = [ "alloc", "deri
 default = ["std"]
 
 # Std is required for std::Error, Read, and Write traits / handlers.
-std = []
+std = [ "serde?/std" ]
 
-# Working around rust weak dependencies until that is stablized.
-# You need to manually enable serde_std if you also enable std and serde... :(
-serde_std = ["serde", "std", "serde/std"]
+# futures-io enables futures async integration. Implies "std".
+futures-io = [ "dep:futures-io", "std" ]
+
+# tokio enables tokio async integration. Implies "std".
+tokio = [ "dep:tokio", "std" ]
+
+# enables serialization / deserialization through serde.
+serde = [ "dep:serde" ]
+
+# This is included for backward compatibility
+serde_std = ["dep:serde", "std", "serde/std"]

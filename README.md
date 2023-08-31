@@ -28,9 +28,6 @@ features are stablized.
           encoding and decoding via `std::io::{Read, Write}` traits
 - `serde` - enables serialization / deserialization through the `serde`
             crate
-- `serde_std` - a workaround for enabling `std` features in the serde lib,
-                (largely the std::io::Error trait) - will become a stub
-                feature when weak dependency features land
 - `futures-io` - enables async encoding and decoding through the futures
                  `io::{AsyncRead, AsyncWrite}` traits
 - `tokio` - enables async encoding and decoding through the tokio

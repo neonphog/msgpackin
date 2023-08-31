@@ -1,4 +1,4 @@
-//! serde Deserializer implementations
+//! `feature=serde` serde Deserializer implementations
 
 use crate::producer::*;
 use crate::*;
@@ -603,14 +603,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut DeserializerSync<'de> {
         match self.0.take() {
             Some(MetaValue::O(Value::Map(map))) => visitor.visit_map(Seq(map
                 .into_iter()
-                .map(|(k, v)| [MetaValue::O(k), MetaValue::O(v)])
-                .flatten())),
-            Some(MetaValue::R(ValueRef::Map(map))) => {
-                visitor.visit_map(Seq(map
+                .flat_map(|(k, v)| [MetaValue::O(k), MetaValue::O(v)]))),
+            Some(MetaValue::R(ValueRef::Map(map))) => visitor
+                .visit_map(Seq(map
                     .into_iter()
-                    .map(|(k, v)| [MetaValue::R(k), MetaValue::R(v)])
-                    .flatten()))
-            }
+                    .flat_map(|(k, v)| [MetaValue::R(k), MetaValue::R(v)]))),
             oth => Err(Error::EDecode {
                 expected: "map".into(),
                 got: format!("{:?}", oth),

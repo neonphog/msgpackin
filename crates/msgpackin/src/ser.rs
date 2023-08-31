@@ -1,4 +1,4 @@
-//! serde Serializer implementations
+//! `feature=serde` serde Serializer implementations
 
 use crate::consumer::*;
 use crate::*;
