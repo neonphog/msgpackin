@@ -12,7 +12,7 @@ impl core::ops::Deref for VarBytes {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &self.0
     }
 }
 
@@ -101,7 +101,7 @@ impl Default for Encoder {
 impl Encoder {
     /// Default constructor for Encoder
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Encode msgpack bytes for `nil`

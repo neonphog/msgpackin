@@ -391,6 +391,7 @@ fn priv_decode<'func, 'prod>(
     iter: &mut (impl Iterator<Item = OwnedToken> + 'func),
     config: &Config,
 ) -> Result<Value> {
+    let _config = config;
     match iter.next() {
         Some(OwnedToken::Nil) => Ok(Value::Nil),
         Some(OwnedToken::Bool(b)) => Ok(Value::Bool(b)),

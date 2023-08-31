@@ -1,12 +1,8 @@
 # Msgpackin Makefile
 
-.PHONY: all bump publish test tools tool_rust tool_fmt tool_readme
+.PHONY: all bump_core bump publish_core publish test static tools tool_rust tool_fmt tool_readme
 
-#RUSTFLAGS += ...
-
-SHELL = /usr/bin/env sh
-
-ENV = RUSTFLAGS='$(RUSTFLAGS)' CARGO_BUILD_JOBS='$(shell nproc || sysctl -n hw.physicalcpu)' NUM_JOBS='$(shell nproc || sysctl -n hw.physicalcpu)' CARGO_TARGET_DIR='$(shell pwd)/target'
+SHELL = /usr/bin/env sh -eu
 
 all: test
 
@@ -30,14 +26,16 @@ publish: test
 	VER="msgpackin-v$$(grep version crates/msgpackin/Cargo.toml | head -1 | cut -d ' ' -f 3 | cut -d \" -f 2)"; git tag -a $$VER -m $$VER
 	git push --tags
 
-test: tools
-	$(ENV) cargo fmt -- --check
-	$(ENV) cargo clippy --all-features
-	$(ENV) RUST_BACKTRACE=1 ./features-test.bash
-	$(ENV) cargo readme -r crates/msgpackin_core -o README.md
-	$(ENV) cargo readme -r crates/msgpackin -o README.md
-	$(ENV) cargo readme -r crates/msgpackin -o ../../README.md
+test: static tools
+	RUST_BACKTRACE=1 ./features-test.bash
 	@if [ "${CI}x" != "x" ]; then git diff --exit-code; fi
+
+static: tools
+	cargo fmt -- --check
+	cargo clippy --all-features
+	cargo readme -r crates/msgpackin_core -o README.md
+	cargo readme -r crates/msgpackin -o README.md
+	cargo readme -r crates/msgpackin -o ../../README.md
 
 tools: tool_rust tool_fmt tool_clippy tool_readme
 

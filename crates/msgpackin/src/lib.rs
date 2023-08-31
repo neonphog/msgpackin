@@ -26,9 +26,6 @@
 //!           encoding and decoding via `std::io::{Read, Write}` traits
 //! - `serde` - enables serialization / deserialization through the `serde`
 //!             crate
-//! - `serde_std` - a workaround for enabling `std` features in the serde lib,
-//!                 (largely the std::io::Error trait) - will become a stub
-//!                 feature when weak dependency features land
 //! - `futures-io` - enables async encoding and decoding through the futures
 //!                  `io::{AsyncRead, AsyncWrite}` traits
 //! - `tokio` - enables async encoding and decoding through the tokio
@@ -138,19 +135,6 @@
 #[cfg(not(feature = "std"))]
 #[macro_use]
 extern crate alloc;
-
-#[cfg(all(feature = "std", feature = "serde", not(feature = "serde_std")))]
-compile_error!("If features \"std\" and \"serde\" are enabled, feature \"serde_std\" must also be enabled. This workaround can be removed once weak dependency features are stable.");
-
-#[cfg(all(feature = "futures-io", not(feature = "std")))]
-compile_error!(
-    "You cannot enable feature \"futures-io\" without also enabling \"std\""
-);
-
-#[cfg(all(feature = "tokio", not(feature = "std")))]
-compile_error!(
-    "You cannot enable feature \"tokio\" without also enabling \"std\""
-);
 
 #[cfg(feature = "serde")]
 const EXT_STRUCT_NAME: &str = "_ExtStruct";
